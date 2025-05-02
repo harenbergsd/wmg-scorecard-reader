@@ -36,7 +36,8 @@ def dfs_to_image(dfs, titles=None, output_path="tables.png"):
     import matplotlib.pyplot as plt
 
     n = sum([len(df) for df in dfs])
-    fig, axes = plt.subplots(nrows=len(dfs), figsize=(8, 0.3 * n))
+    h = max(0.3 * n, 4)
+    fig, axes = plt.subplots(nrows=len(dfs), figsize=(8, h))
     if n == 1:
         axes = [axes]
 

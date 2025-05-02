@@ -349,6 +349,8 @@ def get_score_section(file_or_bytes, return_rect_contours=False, save_steps=Fals
     for i in np.arange(0.02, 0.1, 0.01):
         lower_color, upper_color = get_color_range(BROWN_BGR, i)
         contours = get_contours_by_color(image, lower_color, upper_color, required_solidity=SCORECARD_SOLIDITY)
+        if contours is None:
+            continue
         contours = [c for c in contours if cv2.contourArea(c) > MIN_SCORECARD_AREA * image.shape[0] * image.shape[1]]
 
         for i, contour in enumerate(contours):
@@ -371,7 +373,6 @@ def get_score_section(file_or_bytes, return_rect_contours=False, save_steps=Fals
     if rects is not None and score_image is not None:
         _, _, w, _ = cv2.boundingRect(contour)
         contour = dilate_contour(contour, w // 8, image.shape[:2])
-
         course_image, _ = extract_image_rects(image, contour)
         course_image = course_image[0:500, 1000:]
 
@@ -401,7 +402,7 @@ def extract_yellow_rectangles(image, lower_color, upper_color, return_contours=F
         x, y, w, h = cv2.boundingRect(c)
         aspect_ratio = w / float(h)
         area = w * h
-        return 0.75 <= aspect_ratio <= 1.2 and w > 100
+        return 0.75 <= aspect_ratio <= 1.2 and w > 100 and w < 200
 
     contours = [c for c in contours if valid_contour(c)]
 
