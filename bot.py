@@ -9,8 +9,11 @@ from io import BytesIO
 from table2ascii import table2ascii as t2a, PresetStyle
 import hashlib
 import asyncio
+import threading
 
 import misc
+
+file_lock = threading.Lock()
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -93,40 +96,41 @@ async def process_images(images, ctx):
 
 
 def _process_images_sync(images, ctx, loop):
-    standard_contours = misc.load_standard_contours()
-    scorecard = None
-    for img in images:
-        hashval = hash_bytes(img)
-        if hashval in scorecard_cache:
-            s = scorecard_cache[hashval]
-        else:
-            s = Scorecard.from_image(img, standard_contours)
-            scorecard_cache[hashval] = s
-        scorecard = s.copy() if scorecard is None else scorecard.combine(s)
+    with file_lock:
+        standard_contours = misc.load_standard_contours()
+        scorecard = None
+        for img in images:
+            hashval = hash_bytes(img)
+            if hashval in scorecard_cache:
+                s = scorecard_cache[hashval]
+            else:
+                s = Scorecard.from_image(img, standard_contours)
+                scorecard_cache[hashval] = s
+            scorecard = s.copy() if scorecard is None else scorecard.combine(s)
 
-    sc = scorecard.copy()
-    sc.include_pars = True
-    sc = sc.sorted_by_total()
-    if sc is not None:
-        text = sc.course
-        df = sc.summarize_scores()
-        text += f"\n```{df_to_str(df)}```"
+        sc = scorecard.copy()
+        sc.include_pars = True
+        sc = sc.sorted_by_total()
+        if sc is not None:
+            text = sc.course
+            df = sc.summarize_scores()
+            text += f"\n```{df_to_str(df)}```"
 
-        df = sc.summarize_shots()
-        text += f"```{df_to_str(df)}```"
+            df = sc.summarize_shots()
+            text += f"```{df_to_str(df)}```"
 
-        par_comp = sc.compare_to_par().df
-        best_comp = sc.compare_to_best().df
-        titles = ["Ordered Scorecard", "Scores Compared to Par", "Scores Compared to Best Player"]
-        misc.dfs_to_image([sc.df, par_comp, best_comp], titles=titles, output_path="__tmp_tables.png")
+            par_comp = sc.compare_to_par().df
+            best_comp = sc.compare_to_best().df
+            titles = ["Ordered Scorecard", "Scores Compared to Par", "Scores Compared to Best Player"]
+            misc.dfs_to_image([sc.df, par_comp, best_comp], titles=titles, output_path="__tmp_tables.png")
 
-        asyncio.run_coroutine_threadsafe(_send_result(ctx, text), loop)
+            asyncio.run_coroutine_threadsafe(_send_result(ctx, text), loop)
 
-        # Send the scorecard as a CSV file
-        # b = BytesIO()
-        # scorecard.df.to_csv(b)
-        # b.seek(0)
-        # await ctx.send(file=discord.File(b, filename="scorecard.csv"))
+            # Send the scorecard as a CSV file
+            # b = BytesIO()
+            # scorecard.df.to_csv(b)
+            # b.seek(0)
+            # await ctx.send(file=discord.File(b, filename="scorecard.csv"))
 
 
 async def _send_result(ctx, text):
