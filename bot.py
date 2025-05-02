@@ -8,6 +8,7 @@ import aiohttp
 from io import BytesIO
 from table2ascii import table2ascii as t2a, PresetStyle
 import hashlib
+import asyncio
 
 import misc
 
@@ -87,6 +88,11 @@ def split_scorecard(scorecard):
 
 
 async def process_images(images, ctx):
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _process_images_sync, images, ctx, loop)
+
+
+def _process_images_sync(images, ctx, loop):
     standard_contours = misc.load_standard_contours()
     scorecard = None
     for img in images:
@@ -96,7 +102,7 @@ async def process_images(images, ctx):
         else:
             s = Scorecard.from_image(img, standard_contours)
             scorecard_cache[hashval] = s
-        scorecard = s if scorecard is None else scorecard.combine(s)
+        scorecard = s.copy() if scorecard is None else scorecard.combine(s)
 
     sc = scorecard.copy()
     sc.include_pars = True
@@ -113,14 +119,19 @@ async def process_images(images, ctx):
         best_comp = sc.compare_to_best().df
         titles = ["Ordered Scorecard", "Scores Compared to Par", "Scores Compared to Best Player"]
         misc.dfs_to_image([sc.df, par_comp, best_comp], titles=titles, output_path="__tmp_tables.png")
-        with open("__tmp_tables.png", "rb") as f:
-            await ctx.send(text, file=discord.File(f))
+
+        asyncio.run_coroutine_threadsafe(_send_result(ctx, text), loop)
 
         # Send the scorecard as a CSV file
         # b = BytesIO()
         # scorecard.df.to_csv(b)
         # b.seek(0)
         # await ctx.send(file=discord.File(b, filename="scorecard.csv"))
+
+
+async def _send_result(ctx, text):
+    with open("__tmp_tables.png", "rb") as f:
+        await ctx.send(text, file=discord.File(f))
 
 
 @larry.command(name="review")

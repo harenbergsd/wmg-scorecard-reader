@@ -20,8 +20,8 @@ PAR_NAME = "<PAR>"
 class Scorecard:
     def __init__(self, course, players, scores, pars_csv=None):
         self._course = course
-        self._players = players
-        self._scores = scores
+        self._players = list(players)
+        self._scores = list(scores)
         self._include_pars = False
         self._pars = None
 

@@ -35,8 +35,8 @@ def load_standard_contours(path="standard_contours.pkl"):
 def dfs_to_image(dfs, titles=None, output_path="tables.png"):
     import matplotlib.pyplot as plt
 
-    n = len(dfs)
-    fig, axes = plt.subplots(nrows=n, figsize=(8, 2 * n))
+    n = sum([len(df) for df in dfs])
+    fig, axes = plt.subplots(nrows=len(dfs), figsize=(8, 0.3 * n))
     if n == 1:
         axes = [axes]
 
