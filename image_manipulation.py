@@ -211,7 +211,8 @@ def dilate_contour(contour, dilation_pixels, image_shape):
     cv2.drawContours(mask, [contour], -1, (255), thickness=cv2.FILLED)
 
     # Define kernel for dilation
-    kernel = np.ones((dilation_pixels * 2, dilation_pixels * 2), np.uint8)
+    # kernel = np.ones((dilation_pixels * 2, dilation_pixels * 2), np.uint8)
+    kernel = np.ones((dilation_pixels * 2, 1), np.uint8)  # vertical dilation
 
     # Dilate the mask
     dilated_mask = cv2.dilate(mask, kernel, iterations=1)
@@ -351,15 +352,15 @@ def get_score_section(file_or_bytes, return_rect_contours=False, save_steps=Fals
         contours = [c for c in contours if cv2.contourArea(c) > MIN_SCORECARD_AREA * image.shape[0] * image.shape[1]]
 
         for i, contour in enumerate(contours):
-            # Show contour on image
-            if save_steps:
-                contour_image = image.copy()
-                cv2.drawContours(contour_image, [contour], -1, (0, 255, 0), 3)
-                cv2.imwrite(f"contour_{i}.png", contour_image)
             score_image, rects = extract_image_rects(
                 image, contour, return_contours=return_rect_contours, save_steps=save_steps
             )
             if len(rects) > 0 and len(rects) % 18 == 0:
+                # Show contour on image
+                if save_steps:
+                    contour_image = image.copy()
+                    cv2.drawContours(contour_image, [contour], -1, (0, 255, 0), 3)
+                    cv2.imwrite(f"contour.png", contour_image)
                 break
             else:
                 rects = None
@@ -370,6 +371,7 @@ def get_score_section(file_or_bytes, return_rect_contours=False, save_steps=Fals
     if rects is not None and score_image is not None:
         _, _, w, _ = cv2.boundingRect(contour)
         contour = dilate_contour(contour, w // 8, image.shape[:2])
+
         course_image, _ = extract_image_rects(image, contour)
         course_image = course_image[0:500, 1000:]
 

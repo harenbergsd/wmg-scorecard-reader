@@ -20,6 +20,7 @@ def main():
     scorecard = Scorecard.from_image(args.image_path, standard_contours)
     pardiff = scorecard.compare_to_par()
     bestdiff = scorecard.compare_to_best()
+    print(scorecard.course)
     print(scorecard.summarize_shots())
     print(scorecard.summarize_scores())
     dfs_to_image(
