@@ -1,0 +1,301 @@
+import logging
+import numpy as np
+import pandas as pd
+from PIL import Image, ImageEnhance, ImageFilter
+from scipy.spatial import procrustes
+
+from image_manipulation import *
+import warnings
+
+warnings.filterwarnings("ignore", message="No ccache found.*", category=UserWarning)
+
+from paddleocr import PaddleOCR
+
+logging.getLogger("paddle").setLevel(logging.WARNING)  # Suppresses PaddlePaddle logs
+logging.getLogger("ppocr").setLevel(logging.WARNING)  # Suppresses PaddleOCR logs
+
+PAR_NAME = "<PAR>"
+
+
+class Scorecard:
+    def __init__(self, course, players, scores, pars_csv=None):
+        self._course = course
+        self._players = players
+        self._scores = scores
+        self._include_pars = False
+        self._pars = None
+
+        self._df = pd.DataFrame(scores, columns=list(range(1, 19)), index=pd.Index(players))
+        mask_all_na = self._df.notna().any(axis=1)
+        self._df["total"] = self._df.sum(axis=1, skipna=True).mask(~mask_all_na)
+        self._df = self._df.astype("Int64")
+        self._set_pars()
+
+    def sorted_by_total(self):
+        s = self.copy()
+        s._df = s._df.sort_values(by=["total"])
+        s._players = [p for p in s._df.index.tolist() if p != PAR_NAME]
+        return s
+
+    def combine(self, other):
+        if self.course != other.course:
+            raise ValueError("Courses do not match")
+        s = self.copy()
+        s._df = pd.concat([s._df, other.df])
+        s._players += other.players
+        s._scores += other.scores
+        return s
+
+    def compare_to_best(self):
+        s = self.copy()
+        s._df[s._df["total"] == 0] = 99
+        s = s.sorted_by_total()
+        best = s._df.iloc[0]
+        s._df[s._df["total"] == 99] = np.nan
+        s._df = s._df - best
+        return s
+
+    def compare_to_par(self):
+        if self._pars is None:
+            raise ValueError("No pars available")
+        s = self.copy()
+        s.include_pars = True
+        s._df = s._df.drop(PAR_NAME)
+        s._df = s._df - s.pars
+        # recompute total since pars is 18 holes and scorecard might be 9 holes
+        s._df = s._df.drop(columns="total")
+        mask_all_na = self._df.notna().any(axis=1)
+        s._df["total"] = s._df.sum(axis=1, skipna=True).mask(~mask_all_na)
+        s._df = s._df.astype("Int64")
+        return s
+
+    def _set_pars(self, pars_csv="pars.csv"):
+        pars = pd.read_csv(pars_csv, index_col="course")
+
+        def jaccard_similarity(str1, str2):
+            set1, set2 = set(str1.lower()), set(str2.lower())
+            return len(set1 & set2) / len(set1 | set2)
+
+        # calculate string similarity for each course
+        pars["similarity"] = pars.index.map(lambda x: jaccard_similarity(x, self.course))
+
+        best_match_idx = pars["similarity"].idxmax()
+        pars = pars.drop(columns="similarity")
+
+        self._course = best_match_idx  # update the course name to proper spelling (in case OCR is wrong)
+        self._pars = pars.loc[best_match_idx].values
+
+    def summarize_scores(self):
+        """Computers the front 9 (in), back 9 (out), and total scores for each player"""
+        scores = self.compare_to_par().df
+        scores = scores.drop(columns="total")
+        front_nine = scores.iloc[:, :9].sum(axis=1)
+        back_nine = scores.iloc[:, 9:].sum(axis=1)
+        total = front_nine + back_nine
+
+        result = pd.DataFrame(
+            {
+                "in": front_nine,
+                "out": back_nine,
+                "total": total,
+            },
+            index=self.players,
+        )
+
+        return result
+
+    def summarize_shots(self):
+        """count the scores compared to par per player"""
+        if not self.include_pars:
+            self.include_pars = True
+        scores = self.compare_to_par().df
+        scores = scores.drop(columns="total")
+        best = scores.min().min()
+        worst = scores.max().max()
+
+        result = pd.DataFrame(index=self.players, columns=range(best, worst + 1))
+
+        for i in range(best, worst + 1):
+            counts = scores.applymap(lambda x: 1 if pd.notna(x) and x == i else 0).sum(axis=1)
+            result.loc[:, i] = counts
+
+        # get number of hole in one scores
+        result["hi1s"] = self.df.applymap(lambda x: 1 if pd.notna(x) and x == 1 else 0).sum(axis=1)
+
+        return result
+
+    @property
+    def course(self):
+        return self._course
+
+    @property
+    def players(self):
+        return self._players
+
+    @property
+    def scores(self):
+        return self._scores
+
+    @property
+    def df(self):
+        return self._df
+
+    @property
+    def pars(self):
+        return self._pars
+
+    @property
+    def include_pars(self):
+        return self._include_pars
+
+    @include_pars.setter
+    def include_pars(self, value):
+        if value and self._pars is None:
+            raise ValueError("No pars available. Add them with the add_pars method.")
+        self._include_pars = value
+        if not value:
+            self._df = self._df.drop(PAR_NAME, errors="ignore")
+        if value:
+            pars = pd.Series(self._pars, name=PAR_NAME, index=self.df.columns)
+            self._df = pd.concat([pars.to_frame().T, self._df])
+
+    def __str__(self):
+        df = self.df.astype(object).fillna("-")
+        return f"{self.course}\n{df.to_markdown(tablefmt='grid')}"
+
+    def __repr__(self):
+        return f"Scorecard(course={self.course}, players={self.players}, scores={self.scores})"
+
+    def __eq__(self, other):
+        # check if the course, players, and scores are the same
+        # compare dataframes
+        tmp_self = self.df.reset_index(drop=True)
+        tmp_other = other.df.reset_index(drop=True)
+        return tmp_self.equals(tmp_other)
+
+    def copy(self):
+        s = Scorecard(self.course, self.players, self.scores)
+        s._df = self.df.copy()
+        s._pars = self.pars
+        s._include_pars = self.include_pars
+        return s
+
+    @classmethod
+    def from_solution_file(cls, solution_file):
+        with open(solution_file, "r") as f:
+            lines = f.readlines()
+        course = lines[0].strip()
+        lines = lines[1:]
+        players = [line.split(",")[0] for line in lines]
+        # create self.scores with int or nan
+        scores = []
+        for line in lines:
+            s = line.strip().split(",")[1:]
+            scores.append([np.nan if x == "-" else int(x) for x in s])
+
+        return cls(course, players, scores)
+
+    @classmethod
+    def from_image(cls, image_file, standard_contours):
+        course = get_course_from_image(image_file)
+        players = get_players_from_image(image_file)
+        scores = get_scores_from_image(image_file, standard_contours)
+        scores = [scores[i : i + 18] for i in range(0, len(scores), 18)]
+        return cls(course, players, scores)
+
+    def save_as_image(self, filename="scorecard.png"):
+        import plotly.figure_factory as ff
+
+        # Save the scorecard as an image
+        fig = ff.create_table(self._df)
+        fig.write_image(filename, scale=2)
+
+
+def get_course_from_image(image_path):
+    course_image, _, _ = get_score_section(image_path, save_steps=False)
+    if course_image is None:
+        raise ValueError("Course name not found in image")
+
+    ocr = PaddleOCR(lang="en")
+    results = ocr.ocr(np.array(course_image), cls=False)
+
+    course = None
+    for i, line in enumerate(results[0]):
+        text, confidence = line[1]
+        course = text
+        break
+
+    return course
+
+
+def get_players_from_image(image_path):
+    _, score_image, rects = get_score_section(image_path, return_rect_contours=True, save_steps=False)
+    nrows = len(rects) // 18
+
+    # define window boundaries of player name text
+    x1 = 0
+    x2, y1, _, _ = cv2.boundingRect(rects[0])
+    _, y2, _, h = cv2.boundingRect(rects[(nrows - 1) * 18])
+    image = score_image[y1 : (y2 + h), x1:x2]
+
+    # improve image quality
+    image = Image.fromarray(image)
+    image = image.convert("L")
+    enhancer = ImageEnhance.Contrast(image)
+    image = enhancer.enhance(2.0)
+
+    # Use PaddleOCR
+    ocr = PaddleOCR(lang="en")
+    results = ocr.ocr(np.array(image), cls=False)
+    players = []
+    for i, line in enumerate(results[0]):
+        text, confidence = line[1]
+        players.append(text.upper())
+
+    return players
+
+
+def get_scores_from_image(image_path, standard_contours):
+    scores = []
+    _, _, rects = get_score_section(image_path, save_steps=False)
+    for r in rects:
+        digit_contour = digit_from_score_rect(r)
+        score = match_digit_contour(digit_contour, standard_contours)
+        scores.append(score)
+    return scores
+
+
+def best_contour_alignment(c1, c2):
+    """Finds the best circular shift for contour c2 to match c1."""
+    best_shift = 0
+    best_distance = float("inf")
+    best_c2 = c2
+
+    # Try subset of shifts left and right
+    # Don't want to use all shifts because 6 and 9 are the same (although I don't think there are any 9s)
+    for shift in range(-10, 10):
+        shifted_c2 = np.roll(c2, shift, axis=0)
+        distance = np.sum(np.linalg.norm(c1 - shifted_c2, axis=1))  # Fast Euclidean sum
+
+        if distance < best_distance:
+            best_distance = distance
+            best_shift = shift
+            best_c2 = shifted_c2
+
+    return best_c2, best_shift, best_distance
+
+
+def match_digit_contour(digit_contour, standard_contours):
+    num_points = list(standard_contours.values())[0].shape[0]
+    digit_contour = standardize_contour(digit_contour, num_points)
+
+    min_dist = float("inf")
+    best_match = None
+    for digit, standard_contour in standard_contours.items():
+        c, _, _ = best_contour_alignment(standard_contour, digit_contour)
+        _, _, dist = procrustes(c, standard_contour)
+        if dist < min_dist:
+            min_dist = dist
+            best_match = digit
+
+    return best_match
