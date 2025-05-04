@@ -125,18 +125,21 @@ def _process_images_sync(images, ctx, loop):
             titles = ["Ordered Scorecard", "Scores Compared to Par", "Scores Compared to Best Hole Score"]
             misc.dfs_to_image([sc.df, par_comp, best_comp], titles=titles, output_path="__tmp_tables.png")
 
-            asyncio.run_coroutine_threadsafe(_send_result(ctx, text), loop)
+            # csv file
+            b = BytesIO()
+            scorecard.df.to_csv(b)
+            b.seek(0)
+            csv_file = discord.File(b, filename="scorecard.csv")
 
-            # Send the scorecard as a CSV file
-            # b = BytesIO()
-            # scorecard.df.to_csv(b)
-            # b.seek(0)
-            # await ctx.send(file=discord.File(b, filename="scorecard.csv"))
+            asyncio.run_coroutine_threadsafe(_send_result(ctx, text, csv_file), loop)
 
 
-async def _send_result(ctx, text):
+async def _send_result(ctx, text, csv_file=None):
     with open("__tmp_tables.png", "rb") as f:
-        await ctx.send(text, file=discord.File(f))
+        files = [discord.File(f)]
+        if csv_file:
+            files.append(csv_file)
+        await ctx.send(text, files=files)
 
 
 @larry.command(name="review")
