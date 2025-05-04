@@ -36,7 +36,7 @@ class Scorecard:
     def sorted_by_total(self):
         s = self.copy()
         s._df = s._df.sort_values(by=["total"])
-        s._players = [p for p in s._df.index.tolist() if p not in [PAR_NAME, BEST_NAME]]
+        s._players = [p for p in s._df.index.tolist() if p in s._players]
         return s
 
     def combine(self, other):
@@ -182,7 +182,7 @@ class Scorecard:
             self._df = self._df.drop(BEST_NAME, errors="ignore")
         if value and BEST_NAME not in self._df.index:
             best = pd.Series(self._df.min(), name=BEST_NAME, index=self.df.columns)
-            self._df = pd.concat([self._df, best.to_frame().T])
+            self._df = pd.concat([best.to_frame().T, self._df])
             self._df.loc[BEST_NAME, "total"] = 0
             self._df.loc[BEST_NAME, "total"] = self._df.loc[BEST_NAME].sum()
 

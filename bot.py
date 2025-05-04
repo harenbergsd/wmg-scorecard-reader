@@ -6,7 +6,6 @@ from scorecard import Scorecard
 from PIL import Image
 import aiohttp
 from io import BytesIO
-from table2ascii import table2ascii as t2a, PresetStyle
 import hashlib
 import asyncio
 import threading
@@ -59,18 +58,6 @@ async def help_command(ctx):
     embed.set_footer(text="Larry: Lifeless Algorithm Rapidly Reviewing Your scorecard")
     await ctx.send(embed=embed)
 
-
-def df_to_str(df):
-    header = [df.index.name or ""] + list(df.columns)
-    body = [[idx] + list(row) for idx, row in zip(df.index, df.values)]
-
-    table_str = t2a(
-        header=header,
-        body=body,
-        style=PresetStyle.thin_compact,
-    )
-
-    return table_str
 
 
 def split_scorecard(scorecard):

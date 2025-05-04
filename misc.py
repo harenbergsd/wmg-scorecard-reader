@@ -1,5 +1,5 @@
 import pickle
-
+from table2ascii import table2ascii as t2a, PresetStyle, Alignment
 
 def plot_contour(c, output_path="contour.png"):
     c = c.reshape(-1, 1, 2) * 1000
@@ -63,3 +63,17 @@ def dfs_to_image(dfs, titles=None, output_path="tables.png"):
     plt.tight_layout()
     plt.savefig(output_path, dpi=200)
     plt.close()
+
+
+def df_to_str(df):
+    header = [df.index.name or ""] + list(df.columns)
+    body = [[idx] + list(row) for idx, row in zip(df.index, df.values)]
+
+    table_str = t2a(
+        header=header,
+        body=body,
+        style=PresetStyle.thin_compact,
+        alignments=[Alignment.LEFT] + [Alignment.RIGHT] * (len(header) - 1),
+    )
+
+    return table_str

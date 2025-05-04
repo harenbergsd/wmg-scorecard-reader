@@ -6,25 +6,33 @@ from scorecard import *
 from image_manipulation import *
 
 argparser = argparse.ArgumentParser(description="Get the score from the scorecard image")
-argparser.add_argument("image_path", help="Path to the image file")
+# get possibly multiple paths to images
 argparser.add_argument(
-    "--standard_contours",
-    default="standard_contours.pkl",
-    help="Path to the standard contours file",
+    "image_path",
+    type=str,
+    nargs="+",
+    help="Path to the scorecard image(s). Can be a single image or multiple images.",
 )
 args = argparser.parse_args()
 
 
 def main():
     standard_contours = load_standard_contours()
-    scorecard = Scorecard.from_image(args.image_path, standard_contours)
+    scorecard = None
+    for image_path in args.image_path:
+        s = Scorecard.from_image(image_path, standard_contours)
+        scorecard = s.copy() if scorecard is None else scorecard.combine(s)
+    if scorecard is None:
+        print("No scorecard found.")
+        return
+        
     scorecard.include_best = True
     scorecard.include_pars = True
     pardiff = scorecard.compare_to_par()
     bestdiff = scorecard.compare_to_best()
     print(scorecard.course)
-    print(scorecard.summarize_shots())
-    print(scorecard.summarize_scores())
+    print(df_to_str(scorecard.summarize_shots()))
+    print(df_to_str(scorecard.summarize_scores()))
     dfs_to_image(
         [scorecard.df, pardiff.df, bestdiff.df],
         titles=["Scorecard", "Par Diff", "Best Diff"],
