@@ -15,6 +15,7 @@ logging.getLogger("paddle").setLevel(logging.WARNING)  # Suppresses PaddlePaddle
 logging.getLogger("ppocr").setLevel(logging.WARNING)  # Suppresses PaddleOCR logs
 
 PAR_NAME = "<PAR>"
+BEST_NAME = "<BEST>"
 
 
 class Scorecard:
@@ -23,6 +24,7 @@ class Scorecard:
         self._players = list(players)
         self._scores = list(scores)
         self._include_pars = False
+        self._include_best = False
         self._pars = None
 
         self._df = pd.DataFrame(scores, columns=list(range(1, 19)), index=pd.Index(players))
@@ -34,25 +36,33 @@ class Scorecard:
     def sorted_by_total(self):
         s = self.copy()
         s._df = s._df.sort_values(by=["total"])
-        s._players = [p for p in s._df.index.tolist() if p != PAR_NAME]
+        s._players = [p for p in s._df.index.tolist() if p not in [PAR_NAME, BEST_NAME]]
         return s
 
     def combine(self, other):
         if self.course != other.course:
             raise ValueError("Courses do not match")
         s = self.copy()
-        s._df = pd.concat([s._df, other.df])
-        s._players += other.players
-        s._scores += other.scores
+        o = other.copy()
+        o.include_pars = False
+        o.include_best = False
+        s._df = pd.concat([s._df, o.df])
+        s._players += o.players
+        s._scores += o.scores
+        if s.include_best:
+            # recalculate best scores
+            s.include_best = False
+            s.include_best = True
         return s
 
     def compare_to_best(self):
         s = self.copy()
+        s.include_best = True
         s._df[s._df["total"] == 0] = 99
         s = s.sorted_by_total()
-        best = s._df.iloc[0]
         s._df[s._df["total"] == 99] = np.nan
-        s._df = s._df - best
+        s._df = s._df - s._df.loc[BEST_NAME]
+        s._df = s._df.drop(BEST_NAME)
         return s
 
     def compare_to_par(self):
@@ -64,7 +74,7 @@ class Scorecard:
         s._df = s._df - s.pars
         # recompute total since pars is 18 holes and scorecard might be 9 holes
         s._df = s._df.drop(columns="total")
-        mask_all_na = self._df.notna().any(axis=1)
+        mask_all_na = s._df.notna().any(axis=1)
         s._df["total"] = s._df.sum(axis=1, skipna=True).mask(~mask_all_na)
         s._df = s._df.astype("Int64")
         return s
@@ -87,7 +97,9 @@ class Scorecard:
 
     def summarize_scores(self):
         """Computers the front 9 (in), back 9 (out), and total scores for each player"""
-        scores = self.compare_to_par().df
+        s = self.copy()
+        s.include_best = False
+        scores = s.compare_to_par().df
         scores = scores.drop(columns="total")
         front_nine = scores.iloc[:, :9].sum(axis=1)
         back_nine = scores.iloc[:, 9:].sum(axis=1)
@@ -99,28 +111,28 @@ class Scorecard:
                 "out": back_nine,
                 "total": total,
             },
-            index=self.players,
+            index=s.players,
         )
 
         return result
 
     def summarize_shots(self):
         """count the scores compared to par per player"""
-        if not self.include_pars:
-            self.include_pars = True
-        scores = self.compare_to_par().df
+        s = self.copy()
+        s.include_best = False
+        scores = s.compare_to_par().df
         scores = scores.drop(columns="total")
         best = scores.min().min()
         worst = scores.max().max()
 
-        result = pd.DataFrame(index=self.players, columns=range(best, worst + 1))
+        result = pd.DataFrame(index=s.players, columns=range(best, worst + 1))
 
         for i in range(best, worst + 1):
             counts = scores.applymap(lambda x: 1 if pd.notna(x) and x == i else 0).sum(axis=1)
             result.loc[:, i] = counts
 
         # get number of hole in one scores
-        result["hi1s"] = self.df.applymap(lambda x: 1 if pd.notna(x) and x == 1 else 0).sum(axis=1)
+        result["hi1s"] = s.df.applymap(lambda x: 1 if pd.notna(x) and x == 1 else 0).sum(axis=1)
 
         return result
 
@@ -155,9 +167,24 @@ class Scorecard:
         self._include_pars = value
         if not value:
             self._df = self._df.drop(PAR_NAME, errors="ignore")
-        if value:
+        if value and PAR_NAME not in self._df.index:
             pars = pd.Series(self._pars, name=PAR_NAME, index=self.df.columns)
             self._df = pd.concat([pars.to_frame().T, self._df])
+
+    @property
+    def include_best(self):
+        return self._include_best
+
+    @include_best.setter
+    def include_best(self, value):
+        self._include_best = value
+        if not value:
+            self._df = self._df.drop(BEST_NAME, errors="ignore")
+        if value and BEST_NAME not in self._df.index:
+            best = pd.Series(self._df.min(), name=BEST_NAME, index=self.df.columns)
+            self._df = pd.concat([self._df, best.to_frame().T])
+            self._df.loc[BEST_NAME, "total"] = 0
+            self._df.loc[BEST_NAME, "total"] = self._df.loc[BEST_NAME].sum()
 
     def __str__(self):
         df = self.df.astype(object).fillna("-")
@@ -178,6 +205,7 @@ class Scorecard:
         s._df = self.df.copy()
         s._pars = self.pars
         s._include_pars = self.include_pars
+        s._include_best = self.include_best
         return s
 
     @classmethod

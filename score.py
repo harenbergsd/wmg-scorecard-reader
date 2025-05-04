@@ -18,6 +18,8 @@ args = argparser.parse_args()
 def main():
     standard_contours = load_standard_contours()
     scorecard = Scorecard.from_image(args.image_path, standard_contours)
+    scorecard.include_best = True
+    scorecard.include_pars = True
     pardiff = scorecard.compare_to_par()
     bestdiff = scorecard.compare_to_best()
     print(scorecard.course)

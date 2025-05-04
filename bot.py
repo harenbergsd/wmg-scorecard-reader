@@ -110,6 +110,7 @@ def _process_images_sync(images, ctx, loop):
 
         sc = scorecard.copy()
         sc.include_pars = True
+        sc.include_best = True
         sc = sc.sorted_by_total()
         if sc is not None:
             text = sc.course
@@ -121,7 +122,7 @@ def _process_images_sync(images, ctx, loop):
 
             par_comp = sc.compare_to_par().df
             best_comp = sc.compare_to_best().df
-            titles = ["Ordered Scorecard", "Scores Compared to Par", "Scores Compared to Best Player"]
+            titles = ["Ordered Scorecard", "Scores Compared to Par", "Scores Compared to Best Hole Score"]
             misc.dfs_to_image([sc.df, par_comp, best_comp], titles=titles, output_path="__tmp_tables.png")
 
             asyncio.run_coroutine_threadsafe(_send_result(ctx, text), loop)
