@@ -1,3 +1,5 @@
+import cv2
+import numpy as np
 import pickle
 from table2ascii import table2ascii as t2a, PresetStyle, Alignment
 
@@ -7,6 +9,11 @@ def plot_contour(c, output_path="contour.png"):
     img = np.zeros((1000, 1000, 3), dtype=np.uint8)
     cv2.drawContours(img, [c], contourIdx=-1, color=(255, 255, 255), thickness=2)
     cv2.imwrite(output_path, img)
+
+def plot_contour_on_image(c, img, output_path="contour.png"):
+    contour_image = img.copy()
+    cv2.drawContours(contour_image, [c], -1, (0, 255, 0), 3)
+    cv2.imwrite(output_path, contour_image)    
 
 
 def plot_contour_comparison(c1, c2, output_path="contour_comp.png"):

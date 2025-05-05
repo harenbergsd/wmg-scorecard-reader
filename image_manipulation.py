@@ -3,6 +3,8 @@ import cv2
 from PIL import Image
 from constants import *
 
+import misc
+
 
 def reorder_contour(contour):
     """Reorders contour points starting from the leftmost, topmost point"""
@@ -253,11 +255,9 @@ def downsample_colors(image, num_colors=10, required_colors=None):
     return quantized_image
 
 
-def extract_image_rects(image, contour, return_contours=False, save_steps=False):
+def extract_image_rects(image, contour, color_range=(LOWER_YELLOW_BGR, UPPER_YELLOW_BGR), return_contours=False, save_steps=False):
     if save_steps:
-        contour_image = image.copy()
-        cv2.drawContours(contour_image, contour, -1, (0, 255, 0), 3)  # Green color with thickness 3
-        cv2.imwrite("contour.png", contour_image)
+        plot_contour_on_image(contour, image, output_path="contour_of_rects.png")
 
     # Find the minimum area rectangle that can enclose the contour
     box = _get_contour_corners(contour)
@@ -305,8 +305,8 @@ def extract_image_rects(image, contour, return_contours=False, save_steps=False)
 
     rects = extract_yellow_rectangles(
         warped_image,
-        LOWER_YELLOW_BGR,
-        UPPER_YELLOW_BGR,
+        color_range[0],
+        color_range[1],
         return_contours=return_contours,
         save_images=save_steps,
     )
@@ -353,16 +353,18 @@ def get_score_section(file_or_bytes, return_rect_contours=False, save_steps=Fals
             continue
         contours = [c for c in contours if cv2.contourArea(c) > MIN_SCORECARD_AREA * image.shape[0] * image.shape[1]]
 
-        for i, contour in enumerate(contours):
-            score_image, rects = extract_image_rects(
-                image, contour, return_contours=return_rect_contours, save_steps=save_steps
-            )
+        for contour in contours:
+            for j in np.arange(0.2, 0.41, 0.1):
+                color_range = get_color_range(YELLOW_BGR, j)
+                score_image, rects = extract_image_rects(
+                    image, contour, color_range, return_contours=return_rect_contours, save_steps=save_steps
+                )
+                if len(rects) > 0 and len(rects) % 18 == 0:
+                    break
             if len(rects) > 0 and len(rects) % 18 == 0:
                 # Show contour on image
                 if save_steps:
-                    contour_image = image.copy()
-                    cv2.drawContours(contour_image, [contour], -1, (0, 255, 0), 3)
-                    cv2.imwrite(f"contour.png", contour_image)
+                    plot_contour_on_image(contour, image, output_path="contour_scores.png")
                 break
             else:
                 rects = None
@@ -428,12 +430,6 @@ def extract_yellow_rectangles(image, lower_color, upper_color, return_contours=F
         contour_rows[i].sort(key=lambda x: cv2.boundingRect(x)[0])
 
     contours = [c for row in contour_rows for c in row]
-
-    if save_images:
-        contour_image = blurred.copy()
-        cv2.drawContours(contour_image, contours, -1, (0, 255, 0), 3)
-        cv2.imwrite("contour_image.png", contour_image)
-
     if return_contours:
         return contours
 
