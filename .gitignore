@@ -4,3 +4,4 @@ __pycache__
 .env
 __tmp_tables.png
 /myenv/
+.vscode/

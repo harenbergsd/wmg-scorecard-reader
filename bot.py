@@ -59,7 +59,6 @@ async def help_command(ctx):
     await ctx.send(embed=embed)
 
 
-
 def split_scorecard(scorecard):
     df = scorecard.df
     total = df["total"]
@@ -102,10 +101,10 @@ def _process_images_sync(images, ctx, loop):
         if sc is not None:
             text = sc.course
             df = sc.summarize_scores()
-            text += f"\n```{df_to_str(df)}```"
+            text += f"\n```{misc.df_to_str(df)}```"
 
             df = sc.summarize_shots()
-            text += f"```{df_to_str(df)}```"
+            text += f"```{misc.df_to_str(df)}```"
 
             par_comp = sc.compare_to_par().df
             best_comp = sc.compare_to_best().df
