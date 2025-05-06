@@ -113,7 +113,10 @@ def _process_images_sync(images, ctx, loop):
 
             # csv file
             b = BytesIO()
-            scorecard.df.to_csv(b)
+            sc = scorecard.copy()
+            sc = sc.sorted_by_total()
+            sc.include_pars = True
+            sc.df.to_csv(b, index_label=sc.df.index.name)
             b.seek(0)
             csv_file = discord.File(b, filename="scorecard.csv")
 

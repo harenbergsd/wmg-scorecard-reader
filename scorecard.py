@@ -32,6 +32,8 @@ class Scorecard:
         self._df["total"] = self._df.sum(axis=1, skipna=True).mask(~mask_all_na)
         self._df = self._df.astype("Int64")
         self._set_pars()
+        # fugly how course is set in set_pars, so have to do index name here
+        self._df.index.name = self.course
 
     def sorted_by_total(self):
         s = self.copy()
@@ -170,6 +172,7 @@ class Scorecard:
         if value and PAR_NAME not in self._df.index:
             pars = pd.Series(self._pars, name=PAR_NAME, index=self.df.columns)
             self._df = pd.concat([pars.to_frame().T, self._df])
+            self._df.index.name = self.course
 
     @property
     def include_best(self):
@@ -185,6 +188,7 @@ class Scorecard:
             self._df = pd.concat([best.to_frame().T, self._df])
             self._df.loc[BEST_NAME, "total"] = 0
             self._df.loc[BEST_NAME, "total"] = self._df.loc[BEST_NAME].sum()
+            self._df.index.name = self.course
 
     def __str__(self):
         df = self.df.astype(object).fillna("-")

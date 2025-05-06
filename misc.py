@@ -3,6 +3,7 @@ import numpy as np
 import pickle
 from table2ascii import table2ascii as t2a, PresetStyle, Alignment
 
+
 def plot_contour(c, output_path="contour.png"):
     c = c.reshape(-1, 1, 2) * 1000
     c = c.astype(np.int32)
@@ -10,10 +11,11 @@ def plot_contour(c, output_path="contour.png"):
     cv2.drawContours(img, [c], contourIdx=-1, color=(255, 255, 255), thickness=2)
     cv2.imwrite(output_path, img)
 
+
 def plot_contour_on_image(c, img, output_path="contour.png"):
     contour_image = img.copy()
     cv2.drawContours(contour_image, [c], -1, (0, 255, 0), 3)
-    cv2.imwrite(output_path, contour_image)    
+    cv2.imwrite(output_path, contour_image)
 
 
 def plot_contour_comparison(c1, c2, output_path="contour_comp.png"):
@@ -50,8 +52,8 @@ def dfs_to_image(dfs, titles=None, output_path="tables.png"):
 
     for i, (df, ax) in enumerate(zip(dfs, axes)):
         tmpdf = df.reset_index()
-        tmpdf.rename(columns={tmpdf.columns[0]: ""}, inplace=True)
         tmpdf = tmpdf.astype(str).replace("<NA>", "")  # or .replace("nan", "") if needed
+        tmpdf = tmpdf.astype(str).replace("nan", "")
 
         ax.axis("off")
         ax.set_title(titles[i] if titles else f"Table {i+1}", fontsize=10)
