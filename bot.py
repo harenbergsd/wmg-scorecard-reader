@@ -28,11 +28,11 @@ def hash_bytes(data):
 
 
 @bot.group(invoke_without_command=True)
-async def larry(ctx):
-    await ctx.send("Usage: `!larry <command> [option(s)] [message_link(s)]`\nType `!larry help` for details.")
+async def larrybot(ctx):
+    await ctx.send("Usage: `!larrybot <command> [option(s)] [message_link(s)]`\nType `!larrybot help` for details.")
 
 
-@larry.command(name="help")
+@larrybot.command(name="help")
 async def help_command(ctx):
     embed = discord.Embed(
         title="LARRY Bot Help",
@@ -50,12 +50,12 @@ async def help_command(ctx):
     embed.add_field(
         name="Usage",
         value="Upload image(s) and, in the same message, type:\n"
-        "```!larry review```\n"
+        "```!larrybot review```\n"
         "Or provide a (or multiple) Discord message link(s) with images:\n"
-        "```!larry review <message-link1> ... <message-linkN>```",
+        "```!larrybot review <message-link1> ... <message-linkN>```",
         inline=False,
     )
-    embed.set_footer(text="Larry: Lifeless Algorithm Rapidly Reviewing Your scorecard")
+    embed.set_footer(text="LARRY: Lifeless Algorithm Rapidly Reviewing Your scorecard")
     await ctx.send(embed=embed)
 
 
@@ -128,7 +128,7 @@ async def _send_result(ctx, text, csv_file=None):
         await ctx.send(text, files=files)
 
 
-@larry.command(name="review")
+@larrybot.command(name="review")
 async def review_command(ctx, *args):
     image_urls = []
 
