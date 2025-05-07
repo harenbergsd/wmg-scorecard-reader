@@ -20,10 +20,10 @@ for image_file in image_files:
         print(f"✗")
         df = gt.df.reset_index(drop=True)
         scorecard_df = scorecard.df.reset_index(drop=True)
-
-        diff_mask = df != scorecard_df
-        differences = df[diff_mask].combine_first(scorecard_df[diff_mask])
-        print(differences)
+        print(scorecard.course)
+        print(gt.course)
+        print(df)
+        print(scorecard_df)
         break
     else:
         print(f"✓")

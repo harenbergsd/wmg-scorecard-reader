@@ -85,7 +85,8 @@ def _process_images_sync(images, ctx, loop):
     with file_lock:
         standard_contours = misc.load_standard_contours()
         scorecard = None
-        for img in images:
+        for i, img in enumerate(images):
+            print(f"Processing image {i + 1}/{len(images)}")
             hashval = hash_bytes(img)
             if hashval in scorecard_cache:
                 s = scorecard_cache[hashval]
@@ -124,11 +125,12 @@ def _process_images_sync(images, ctx, loop):
 
 
 async def _send_result(ctx, text, csv_file=None):
-    with open("__tmp_tables.png", "rb") as f:
-        files = [discord.File(f)]
-        if csv_file:
-            files.append(csv_file)
-        await ctx.send(text, files=files)
+    await ctx.send("Here is just the CSV:", files=[csv_file])
+    # with open("__tmp_tables.png", "rb") as f:
+    #     files = [discord.File(f)]
+    #     if csv_file:
+    #         files.append(csv_file)
+    #     await ctx.send(text, files=files)
 
 
 @larrybot.command(name="review")

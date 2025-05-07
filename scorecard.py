@@ -28,12 +28,11 @@ class Scorecard:
         self._pars = None
 
         self._df = pd.DataFrame(scores, columns=list(range(1, 19)), index=pd.Index(players))
+        self._df.index.name = self.course
         mask_all_na = self._df.notna().any(axis=1)
         self._df["total"] = self._df.sum(axis=1, skipna=True).mask(~mask_all_na)
         self._df = self._df.astype("Int64")
         self._set_pars()
-        # fugly how course is set in set_pars, so have to do index name here
-        self._df.index.name = self.course
 
     def sorted_by_total(self):
         s = self.copy()
@@ -93,8 +92,6 @@ class Scorecard:
 
         best_match_idx = pars["similarity"].idxmax()
         pars = pars.drop(columns="similarity")
-
-        self._course = best_match_idx  # update the course name to proper spelling (in case OCR is wrong)
         self._pars = pars.loc[best_match_idx].values
 
     def summarize_scores(self):
@@ -202,7 +199,7 @@ class Scorecard:
         # compare dataframes
         tmp_self = self.df.reset_index(drop=True)
         tmp_other = other.df.reset_index(drop=True)
-        return tmp_self.equals(tmp_other)
+        return tmp_self.equals(tmp_other) and self.course == other.course
 
     def copy(self):
         s = Scorecard(self.course, self.players, self.scores)
@@ -250,14 +247,31 @@ def get_course_from_image(image_path):
 
     ocr = PaddleOCR(lang="en")
     results = ocr.ocr(np.array(course_image), cls=False)
+    if len(results) == 0:
+        raise ValueError("Course name not found in image")
 
-    course = None
-    for i, line in enumerate(results[0]):
-        text, confidence = line[1]
-        course = text
-        break
+    texts = []
+    for line in results:
+        for box in line:
+            text, conf = box[1]
+            if conf > 0.5:
+                texts.append(text)
 
-    return course
+    # load courses from pars.csv
+    pars = pd.read_csv("pars.csv", index_col="course")
+    courses = [c for c in pars.index.tolist()]
+
+    def most_similar_course(s):
+        course = min(courses, key=lambda c: misc.string_edit_distance(s, c))
+        return course, misc.string_edit_distance(s, course)
+
+    # try all combinations of texts
+    # OCR might split into separate words and we might have extra noise
+    # this might not be necessary
+    texts = ["".join(texts[i:j]) for i in range(len(texts)) for j in range(i + 1, len(texts) + 1)]
+
+    options = [most_similar_course(t) for t in texts]
+    return min(options, key=lambda x: x[1])[0]
 
 
 def get_players_from_image(image_path):

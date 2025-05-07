@@ -255,7 +255,9 @@ def downsample_colors(image, num_colors=10, required_colors=None):
     return quantized_image
 
 
-def extract_image_rects(image, contour, color_range=(LOWER_YELLOW_BGR, UPPER_YELLOW_BGR), return_contours=False, save_steps=False):
+def extract_image_rects(
+    image, contour, color_range=(LOWER_YELLOW_BGR, UPPER_YELLOW_BGR), return_contours=False, save_steps=False
+):
     if save_steps:
         plot_contour_on_image(contour, image, output_path="contour_of_rects.png")
 
@@ -376,7 +378,7 @@ def get_score_section(file_or_bytes, return_rect_contours=False, save_steps=Fals
         _, _, w, _ = cv2.boundingRect(contour)
         contour = dilate_contour(contour, w // 8, image.shape[:2])
         course_image, _ = extract_image_rects(image, contour)
-        course_image = course_image[0:500, 1000:]
+        course_image = course_image[50:500, 1000:]
 
     return course_image, score_image, rects
 

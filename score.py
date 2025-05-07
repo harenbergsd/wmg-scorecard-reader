@@ -30,6 +30,7 @@ def main():
     scorecard.include_pars = True
     pardiff = scorecard.compare_to_par()
     bestdiff = scorecard.compare_to_best()
+    print(scorecard.course)
     print(df_to_str(scorecard.summarize_shots()))
     print(df_to_str(scorecard.summarize_scores()))
     dfs_to_image(

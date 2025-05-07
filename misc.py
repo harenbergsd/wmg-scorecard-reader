@@ -86,3 +86,24 @@ def df_to_str(df):
     )
 
     return table_str
+
+
+def string_edit_distance(s1, s2):
+    """Calculate the edit distance between two strings.
+    https://stackoverflow.com/questions/2460177/edit-distance-in-python
+    """
+    s1 = "".join(s1.split()).lower()
+    s2 = "".join(s2.split()).lower()
+    if len(s1) < len(s2):
+        return string_edit_distance(s2, s1)
+
+    distances = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        new_distances = [i + 1]
+        for j, c2 in enumerate(s2):
+            if c1 == c2:
+                new_distances.append(distances[j])
+            else:
+                new_distances.append(min(distances[j], distances[j + 1], new_distances[-1]) + 1)
+        distances = new_distances
+    return distances[-1] / max(len(s1), len(s2))  # normalize by length
