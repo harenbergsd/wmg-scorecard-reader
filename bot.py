@@ -82,16 +82,16 @@ def split_scorecard(scorecard):
     return front_nine, back_nine
 
 
-async def process_images(images, ctx):
+async def process_images(images, ctx, msg):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _process_images_runner, images, ctx, loop)
+    await loop.run_in_executor(None, _process_images_runner, images, ctx, loop, msg)
 
 
-def _process_images_runner(images, ctx, loop):
+def _process_images_runner(images, ctx, loop, msg):
     tmp_filename = None
     try:
         tmp_filename = f"{uuid.uuid4().hex}.png"
-        _process_images_sync(images, tmp_filename, ctx, loop)
+        _process_images_sync(images, tmp_filename, ctx, loop, msg)
     except Exception as e:
         raise
     finally:
@@ -99,13 +99,15 @@ def _process_images_runner(images, ctx, loop):
             os.remove(tmp_filename)
 
 
-def _process_images_sync(images, tmp_filename, ctx, loop):
+def _process_images_sync(images, tmp_filename, ctx, loop, msg):
+    msgtext = "Processing images..."
     st = time.time()
     with file_lock:
         standard_contours = misc.load_standard_contours()
         scorecard = None
-        try:
-            for i, img in enumerate(images):
+        for i, img in enumerate(images):
+            t0 = time.time()
+            try:
                 hashval = hash_bytes(img)
                 if hashval in scorecard_cache:
                     s = scorecard_cache[hashval]
@@ -113,8 +115,15 @@ def _process_images_sync(images, tmp_filename, ctx, loop):
                     s = Scorecard.from_image(img, standard_contours)
                     scorecard_cache[hashval] = s
                 scorecard = s.copy() if scorecard is None else scorecard.combine(s)
-        except Exception as e:
-            raise ScorecardError(f"Failed to process image {i+1} of {len(images)}: {e}")
+            except Exception as e:
+                raise ScorecardError(f"Failed to process image {i+1} of {len(images)}: {e}")
+
+            elapsed = time.time() - t0
+            msgtext += f"\nFinished reading card {i+1} of {len(images)} in {elapsed:.2f} seconds."
+            asyncio.run_coroutine_threadsafe(msg.edit(content=msgtext), loop)
+
+    msgtext += f"\nComputing stats and building tables..."
+    asyncio.run_coroutine_threadsafe(msg.edit(content=msgtext), loop)
 
     sc = scorecard.copy()
     sc.include_pars = True
@@ -145,20 +154,20 @@ def _process_images_sync(images, tmp_filename, ctx, loop):
         b.seek(0)
         csv_file = discord.File(b, filename="scorecard.csv")
 
-        future = asyncio.run_coroutine_threadsafe(_send_result(ctx, text, tmp_filename, csv_file), loop)
+        future = asyncio.run_coroutine_threadsafe(_send_result(ctx, msg, text, tmp_filename, csv_file), loop)
         future.result()
 
     print(f"Processed {len(images)} images in {time.time() - st:.2f} seconds.")
 
 
-async def _send_result(ctx, text, tmp_filename, csv_file=None):
+async def _send_result(ctx, msg, text, tmp_filename, csv_file=None):
     if len(text) > 1950:
         text = ""
     with open(tmp_filename, "rb") as f:
         files = [discord.File(f)]
         if csv_file:
             files.append(csv_file)
-        await ctx.send(text, files=files)
+        await msg.edit(content=text, attachments=files)
 
 
 @larrybot.command(name="review")
@@ -199,14 +208,15 @@ async def review_command(ctx, *args):
                 else:
                     await ctx.send(f"Failed to download image: {url}")
 
+    msg = await ctx.send("Processing images...")
     try:
-        await process_images(images, ctx)
+        await process_images(images, ctx, msg)
     except Exception as e:
-        msg = f"""
+        msgtext = f"""
         An error occurred while processing the images: {e}
         Please make sure the images are clear and contain the full scorecard with minimal obstructions.
         """
-        await ctx.send(msg)
+        await msg.edit(content=msgtext)
 
 
 bot.run(TOKEN)
