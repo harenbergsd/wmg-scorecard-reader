@@ -100,6 +100,7 @@ def _process_images_runner(images, ctx, loop):
 
 
 def _process_images_sync(images, tmp_filename, ctx, loop):
+    st = time.time()
     with file_lock:
         standard_contours = misc.load_standard_contours()
         scorecard = None
@@ -146,6 +147,8 @@ def _process_images_sync(images, tmp_filename, ctx, loop):
 
         future = asyncio.run_coroutine_threadsafe(_send_result(ctx, text, tmp_filename, csv_file), loop)
         future.result()
+
+    print(f"Processed {len(images)} images in {time.time() - st:.2f} seconds.")
 
 
 async def _send_result(ctx, text, tmp_filename, csv_file=None):

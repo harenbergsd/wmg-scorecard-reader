@@ -180,7 +180,8 @@ class Scorecard:
         if not value:
             self._df = self._df.drop(BEST_NAME, errors="ignore")
         if value and BEST_NAME not in self._df.index:
-            best = pd.Series(self._df.min(), name=BEST_NAME, index=self.df.columns)
+            df = self._df.drop(PAR_NAME, errors="ignore")
+            best = pd.Series(df.min(), name=BEST_NAME, index=self.df.columns)
             self._df = pd.concat([best.to_frame().T, self._df])
             self._df.loc[BEST_NAME, "total"] = 0
             self._df.loc[BEST_NAME, "total"] = self._df.loc[BEST_NAME].sum()
@@ -239,7 +240,7 @@ class Scorecard:
         fig.write_image(filename, scale=2)
 
 
-def get_course_from_image(image_path):
+def get_course_from_image(image_path, min_confidence=0.5):
     course_image, _, _ = get_score_section(image_path, save_steps=False)
     if course_image is None:
         raise ValueError("Course name not found in image")
@@ -248,29 +249,23 @@ def get_course_from_image(image_path):
     results = ocr.ocr(np.array(course_image), cls=False)
     if len(results) == 0:
         raise ValueError("Course name not found in image")
+    results = [box for line in results for box in line]  # assume there is one line
 
-    texts = []
-    for line in results:
-        for box in line:
-            text, conf = box[1]
-            if conf > 0.5:
-                texts.append(text)
+    # ocr_result: List of [box, (text, confidence)]
+    # order by x coordinate
+    results = sorted(results, key=lambda x: x[0][0][0])
+
+    text = ""
+    for box in results:
+        t, conf = box[1]
+        if conf > min_confidence:
+            text += t
 
     # load courses from pars.csv
     pars = pd.read_csv("pars.csv", index_col="course")
     courses = [c for c in pars.index.tolist()]
 
-    def most_similar_course(s):
-        course = min(courses, key=lambda c: misc.string_edit_distance(s, c))
-        return course, misc.string_edit_distance(s, course)
-
-    # try all combinations of texts
-    # OCR might split into separate words and we might have extra noise
-    # this might not be necessary
-    texts = ["".join(texts[i:j]) for i in range(len(texts)) for j in range(i + 1, len(texts) + 1)]
-
-    options = [most_similar_course(t) for t in texts]
-    return min(options, key=lambda x: x[1])[0]
+    return min(courses, key=lambda c: misc.string_edit_distance(text, c))
 
 
 def get_players_from_image(image_path):
