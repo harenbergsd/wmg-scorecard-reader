@@ -33,11 +33,7 @@ def main():
     print(scorecard.course)
     print(df_to_str(scorecard.summarize_shots()))
     print(df_to_str(scorecard.summarize_scores()))
-    dfs_to_image(
-        [scorecard.df, pardiff.df, bestdiff.df],
-        titles=["Scorecard", "Par Diff", "Best Diff"],
-        output_path="__tmp_tables.png",
-    )
+    dfs_to_image([scorecard.df, pardiff.df, bestdiff.df], titles=["Scorecard", "Par Diff", "Best Diff"])
 
 
 if __name__ == "__main__":

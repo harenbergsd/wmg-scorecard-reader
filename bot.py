@@ -9,6 +9,8 @@ from io import BytesIO
 import hashlib
 import asyncio
 import threading
+import uuid
+import time
 
 import misc
 
@@ -21,6 +23,10 @@ intents = discord.Intents.default()
 intents.message_content = True  # Enable message content intent
 bot = commands.Bot(command_prefix="!", intents=intents)
 scorecard_cache = {}
+
+
+class ScorecardError(Exception):
+    pass
 
 
 def hash_bytes(data):
@@ -78,59 +84,78 @@ def split_scorecard(scorecard):
 
 async def process_images(images, ctx):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _process_images_sync, images, ctx, loop)
+    await loop.run_in_executor(None, _process_images_runner, images, ctx, loop)
 
 
-def _process_images_sync(images, ctx, loop):
+def _process_images_runner(images, ctx, loop):
+    tmp_filename = None
+    try:
+        tmp_filename = f"{uuid.uuid4().hex}.png"
+        _process_images_sync(images, tmp_filename, ctx, loop)
+    except Exception as e:
+        raise
+    finally:
+        if tmp_filename and os.path.exists(tmp_filename):
+            os.remove(tmp_filename)
+
+
+def _process_images_sync(images, tmp_filename, ctx, loop):
     with file_lock:
         standard_contours = misc.load_standard_contours()
         scorecard = None
-        for i, img in enumerate(images):
-            print(f"Processing image {i + 1}/{len(images)}")
-            hashval = hash_bytes(img)
-            if hashval in scorecard_cache:
-                s = scorecard_cache[hashval]
-            else:
-                s = Scorecard.from_image(img, standard_contours)
-                scorecard_cache[hashval] = s
-            scorecard = s.copy() if scorecard is None else scorecard.combine(s)
+        try:
+            for i, img in enumerate(images):
+                hashval = hash_bytes(img)
+                if hashval in scorecard_cache:
+                    s = scorecard_cache[hashval]
+                else:
+                    s = Scorecard.from_image(img, standard_contours)
+                    scorecard_cache[hashval] = s
+                scorecard = s.copy() if scorecard is None else scorecard.combine(s)
+        except Exception as e:
+            raise ScorecardError(f"Failed to process image {i+1} of {len(images)}: {e}")
 
+    sc = scorecard.copy()
+    sc.include_pars = True
+    sc.include_best = True
+    sc = sc.sorted_by_total()
+    if sc is not None:
+        text = sc.course
+        df = sc.summarize_scores()
+        max_rows = 10  # Limit to 10 rows for Discord message size
+        if len(df) > max_rows:
+            text += f"\n(Summary tables limited to 10 rows due to Discord message size limits)"
+        text += f"\n```{misc.df_to_str(df, max_rows=max_rows)}```"
+
+        df = sc.summarize_shots()
+        text += f"```{misc.df_to_str(df, max_rows=max_rows)}```"
+
+        par_comp = sc.compare_to_par().df
+        best_comp = sc.compare_to_best().df
+        titles = ["Ordered Scorecard", "Scores Compared to Par", "Scores Compared to Best Hole Score"]
+        misc.dfs_to_image([sc.df, par_comp, best_comp], titles=titles, output_path=tmp_filename)
+
+        # csv file
+        b = BytesIO()
         sc = scorecard.copy()
-        sc.include_pars = True
-        sc.include_best = True
         sc = sc.sorted_by_total()
-        if sc is not None:
-            text = sc.course
-            df = sc.summarize_scores()
-            text += f"\n```{misc.df_to_str(df)}```"
+        sc.include_pars = True
+        sc.df.to_csv(b, index_label=sc.df.index.name)
+        b.seek(0)
+        csv_file = discord.File(b, filename="scorecard.csv")
 
-            df = sc.summarize_shots()
-            text += f"```{misc.df_to_str(df)}```"
-
-            par_comp = sc.compare_to_par().df
-            best_comp = sc.compare_to_best().df
-            titles = ["Ordered Scorecard", "Scores Compared to Par", "Scores Compared to Best Hole Score"]
-            misc.dfs_to_image([sc.df, par_comp, best_comp], titles=titles, output_path="__tmp_tables.png")
-
-            # csv file
-            b = BytesIO()
-            sc = scorecard.copy()
-            sc = sc.sorted_by_total()
-            sc.include_pars = True
-            sc.df.to_csv(b, index_label=sc.df.index.name)
-            b.seek(0)
-            csv_file = discord.File(b, filename="scorecard.csv")
-
-            asyncio.run_coroutine_threadsafe(_send_result(ctx, text, csv_file), loop)
+        future = asyncio.run_coroutine_threadsafe(_send_result(ctx, text, tmp_filename, csv_file), loop)
+        future.result()
 
 
-async def _send_result(ctx, text, csv_file=None):
-    await ctx.send("Here is just the CSV:", files=[csv_file])
-    # with open("__tmp_tables.png", "rb") as f:
-    #     files = [discord.File(f)]
-    #     if csv_file:
-    #         files.append(csv_file)
-    #     await ctx.send(text, files=files)
+async def _send_result(ctx, text, tmp_filename, csv_file=None):
+    if len(text) > 1950:
+        text = ""
+    with open(tmp_filename, "rb") as f:
+        files = [discord.File(f)]
+        if csv_file:
+            files.append(csv_file)
+        await ctx.send(text, files=files)
 
 
 @larrybot.command(name="review")

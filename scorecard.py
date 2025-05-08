@@ -36,7 +36,7 @@ class Scorecard:
 
     def sorted_by_total(self):
         s = self.copy()
-        s._df = s._df.sort_values(by=["total"])
+        s._df = s._df.sort_values(by=["total", s._df.index.name or s._df.index])
         s._players = [p for p in s._df.index.tolist() if p in s._players]
         return s
 
@@ -83,12 +83,8 @@ class Scorecard:
     def _set_pars(self, pars_csv="pars.csv"):
         pars = pd.read_csv(pars_csv, index_col="course")
 
-        def jaccard_similarity(str1, str2):
-            set1, set2 = set(str1.lower()), set(str2.lower())
-            return len(set1 & set2) / len(set1 | set2)
-
         # calculate string similarity for each course
-        pars["similarity"] = pars.index.map(lambda x: jaccard_similarity(x, self.course))
+        pars["similarity"] = pars.index.map(lambda x: misc.string_edit_distance(x, self.course))
 
         best_match_idx = pars["similarity"].idxmax()
         pars = pars.drop(columns="similarity")
@@ -118,8 +114,11 @@ class Scorecard:
     def summarize_shots(self):
         """count the scores compared to par per player"""
         s = self.copy()
+        scores = s.compare_to_par()
+        s.include_pars = False
         s.include_best = False
-        scores = s.compare_to_par().df
+        scores = s.df
+
         scores = scores.drop(columns="total")
         best = scores.min().min()
         worst = scores.max().max()
@@ -128,10 +127,10 @@ class Scorecard:
 
         for i in range(best, worst + 1):
             counts = scores.applymap(lambda x: 1 if pd.notna(x) and x == i else 0).sum(axis=1)
-            result.loc[:, i] = counts
+            result.loc[:, i] = counts.to_numpy()
 
         # get number of hole in one scores
-        result["hi1s"] = s.df.applymap(lambda x: 1 if pd.notna(x) and x == 1 else 0).sum(axis=1)
+        result.loc[:, "hi1s"] = s.df.applymap(lambda x: 1 if pd.notna(x) and x == 1 else 0).sum(axis=1).values
 
         return result
 

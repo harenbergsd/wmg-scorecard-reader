@@ -74,7 +74,9 @@ def dfs_to_image(dfs, titles=None, output_path="tables.png"):
     plt.close()
 
 
-def df_to_str(df):
+def df_to_str(df, max_rows=None):
+    if max_rows is not None and max_rows > 0:
+        df = df.head(max_rows)
     header = [df.index.name or ""] + list(df.columns)
     body = [[idx] + list(row) for idx, row in zip(df.index, df.values)]
 
