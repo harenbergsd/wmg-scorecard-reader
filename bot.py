@@ -11,6 +11,7 @@ import asyncio
 import threading
 import uuid
 import time
+from collections import defaultdict
 
 import misc
 
@@ -100,11 +101,11 @@ def _process_images_runner(images, ctx, loop, msg):
 
 
 def _process_images_sync(images, tmp_filename, ctx, loop, msg):
+    scorecards = defaultdict(list)
     msgtext = "Processing images..."
     st = time.time()
     with file_lock:
         standard_contours = misc.load_standard_contours()
-        scorecard = None
         for i, img in enumerate(images):
             t0 = time.time()
             try:
@@ -114,7 +115,7 @@ def _process_images_sync(images, tmp_filename, ctx, loop, msg):
                 else:
                     s = Scorecard.from_image(img, standard_contours)
                     scorecard_cache[hashval] = s
-                scorecard = s.copy() if scorecard is None else scorecard.combine(s)
+                scorecards[s.course].append(s.copy())
             except Exception as e:
                 raise ScorecardError(f"Failed to process image {i+1} of {len(images)}: {e}")
 
@@ -125,49 +126,54 @@ def _process_images_sync(images, tmp_filename, ctx, loop, msg):
     msgtext += f"\nComputing stats and building tables..."
     asyncio.run_coroutine_threadsafe(msg.edit(content=msgtext), loop)
 
-    sc = scorecard.copy()
-    sc.include_pars = True
-    sc.include_best = True
-    sc = sc.sorted_by_total()
-    if sc is not None:
-        text = sc.course
-        df = sc.summarize_scores()
-        max_rows = 10  # Limit to 10 rows for Discord message size
-        if len(df) > max_rows:
-            text += f"\n(Summary tables limited to 10 rows due to Discord message size limits)"
-        text += f"\n```{misc.df_to_str(df, max_rows=max_rows)}```"
+    imgbufs = []
+    csvbufs = []
+    for course, scorecard_list in scorecards.items():
+        # combine cards
+        scorecard = scorecard_list[0]
+        for s in scorecard_list[1:]:
+            scorecard = scorecard.combine(s)
 
-        df = sc.summarize_shots()
-        text += f"```{misc.df_to_str(df, max_rows=max_rows)}```"
-
-        par_comp = sc.compare_to_par().df
-        best_comp = sc.compare_to_best().df
-        titles = ["Ordered Scorecard", "Scores Compared to Par", "Scores Compared to Best Hole Score"]
-        misc.dfs_to_image([sc.df, par_comp, best_comp], titles=titles, output_path=tmp_filename)
-
-        # csv file
-        b = BytesIO()
         sc = scorecard.copy()
-        sc = sc.sorted_by_total()
         sc.include_pars = True
-        sc.df.to_csv(b, index_label=sc.df.index.name)
-        b.seek(0)
-        csv_file = discord.File(b, filename="scorecard.csv")
+        sc.include_best = True
+        sc = sc.sorted_by_total()
+        if sc is not None:
+            score_summary = sc.summarize_scores()
+            shot_summary = sc.summarize_shots()
+            par_comp = sc.compare_to_par().df
+            best_comp = sc.compare_to_best().df
 
-        future = asyncio.run_coroutine_threadsafe(_send_result(ctx, msg, text, tmp_filename, csv_file), loop)
-        future.result()
+            ibuf = BytesIO()
+            misc.dfs_to_image(
+                [score_summary, shot_summary, sc.df, par_comp, best_comp],
+                titles=[
+                    "Score Summary",
+                    "Shot Summary",
+                    "Ordered Scorecard",
+                    "Scores Compared to Par",
+                    "Scores Compared to Best Hole Score",
+                ],
+                output_path=ibuf,
+            )
+            ibuf.seek(0)
+            imgbufs.append(ibuf)
+
+            # csv file
+            cbuf = BytesIO()
+            sc = scorecard.copy()
+            sc = sc.sorted_by_total()
+            sc.include_pars = True
+            sc.df.to_csv(cbuf, index_label=sc.df.index.name)
+            cbuf.seek(0)
+            csvbufs.append(cbuf)
+
+    img_files = [discord.File(b, filename=f"report{i}.png") for i, b in enumerate(imgbufs)]
+    csv_files = [discord.File(b, filename=f"scorecard{i}.csv") for i, b in enumerate(csvbufs)]
+
+    asyncio.run_coroutine_threadsafe(msg.edit(content="", attachments=img_files + csv_files), loop)
 
     print(f"Processed {len(images)} images in {time.time() - st:.2f} seconds.")
-
-
-async def _send_result(ctx, msg, text, tmp_filename, csv_file=None):
-    if len(text) > 1950:
-        text = ""
-    with open(tmp_filename, "rb") as f:
-        files = [discord.File(f)]
-        if csv_file:
-            files.append(csv_file)
-        await msg.edit(content=text, attachments=files)
 
 
 @larrybot.command(name="review")

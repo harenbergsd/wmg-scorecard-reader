@@ -108,6 +108,7 @@ class Scorecard:
             },
             index=s.players,
         )
+        result.index.name = self.course
 
         return result
 
@@ -125,6 +126,7 @@ class Scorecard:
         worst = scores.max().max()
 
         result = pd.DataFrame(index=s.players, columns=range(best, worst + 1))
+        result.index.name = self.course
 
         for i in range(best, worst + 1):
             counts = scores.applymap(lambda x: 1 if pd.notna(x) and x == i else 0).sum(axis=1)

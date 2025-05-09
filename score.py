@@ -28,12 +28,15 @@ def main():
 
     scorecard.include_best = True
     scorecard.include_pars = True
+    summary = scorecard.summarize_scores()
+    shots = scorecard.summarize_shots()
     pardiff = scorecard.compare_to_par()
     bestdiff = scorecard.compare_to_best()
     print(scorecard.course)
-    print(df_to_str(scorecard.summarize_shots()))
-    print(df_to_str(scorecard.summarize_scores()))
-    dfs_to_image([scorecard.df, pardiff.df, bestdiff.df], titles=["Scorecard", "Par Diff", "Best Diff"])
+    dfs_to_image(
+        [summary, shots, scorecard.df, pardiff.df, bestdiff.df],
+        titles=["Summary", "Shots", "Scorecard", "Par Diff", "Best Diff"],
+    )
 
 
 if __name__ == "__main__":

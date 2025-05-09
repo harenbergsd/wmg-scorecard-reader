@@ -45,8 +45,8 @@ def dfs_to_image(dfs, titles=None, output_path="tables.png"):
     import matplotlib.pyplot as plt
 
     n = sum([len(df) for df in dfs])
-    h = max(0.3 * n, 4)
-    fig, axes = plt.subplots(nrows=len(dfs), figsize=(8, h))
+    h = max(0.35 * n, 4)
+    fig, axes = plt.subplots(nrows=len(dfs), figsize=(8, h), constrained_layout=True)
     if n == 1:
         axes = [axes]
 
