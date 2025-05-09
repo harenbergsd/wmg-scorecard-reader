@@ -86,7 +86,7 @@ class Scorecard:
         # calculate string similarity for each course
         pars["similarity"] = pars.index.map(lambda x: misc.string_edit_distance(x, self.course))
 
-        best_match_idx = pars["similarity"].idxmax()
+        best_match_idx = pars["similarity"].idxmin()
         pars = pars.drop(columns="similarity")
         self._pars = pars.loc[best_match_idx].values
 
