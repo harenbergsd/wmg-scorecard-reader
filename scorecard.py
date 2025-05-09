@@ -117,7 +117,8 @@ class Scorecard:
         scores = s.compare_to_par()
         s.include_pars = False
         s.include_best = False
-        scores = s.df
+        scores.include_best = False
+        scores = scores.df
 
         scores = scores.drop(columns="total")
         best = scores.min().min()
