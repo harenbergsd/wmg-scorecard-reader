@@ -194,41 +194,6 @@ def _get_contour_corners(contour):
     return corners
 
 
-def dilate_contour(contour, dilation_pixels, image_shape):
-    """
-    Expands a contour by a specified number of pixels while keeping the same shape.
-
-    Parameters:
-        contour (numpy.ndarray): The contour to be expanded (Nx1x2 array).
-        dilation_pixels (int): Number of pixels to expand the contour.
-        image_shape (tuple): Shape of the image (height, width) to define mask boundaries.
-
-    Returns:
-        numpy.ndarray: The new expanded contour.
-    """
-    # Create an empty mask
-    mask = np.zeros(image_shape, dtype=np.uint8)
-
-    # Draw the original contour on the mask
-    cv2.drawContours(mask, [contour], -1, (255), thickness=cv2.FILLED)
-
-    # Define kernel for dilation
-    # kernel = np.ones((dilation_pixels * 2, dilation_pixels * 2), np.uint8)
-    kernel = np.ones((dilation_pixels * 2, 1), np.uint8)  # vertical dilation
-
-    # Dilate the mask
-    dilated_mask = cv2.dilate(mask, kernel, iterations=1)
-
-    # Find the new expanded contour
-    new_contours, _ = cv2.findContours(dilated_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    # Return the largest contour (assuming the original shape remains the largest)
-    if new_contours:
-        return max(new_contours, key=cv2.contourArea)
-    else:
-        return contour  # Return original if dilation fails
-
-
 def downsample_colors(image, num_colors=10, required_colors=None):
     pixels = image.reshape((-1, 3)).astype(np.float32)
     h, w = image.shape[:2]
@@ -255,11 +220,45 @@ def downsample_colors(image, num_colors=10, required_colors=None):
     return quantized_image
 
 
+def warped_from_contour(image, contour):
+    # Find the minimum area rectangle that can enclose the contour
+    box = _get_contour_corners(contour)
+
+    # Sort points to ensure consistent order: top-left, top-right, bottom-left, bottom-right
+    # Sort by y-coordinate (top to bottom)
+    box = box[np.argsort(box[:, 1])]
+    top_points = box[:2][np.argsort(box[:2, 0])]
+    bottom_points = box[2:][np.argsort(box[2:, 0])]
+    box = np.vstack([top_points, bottom_points])
+
+    # 1) get the integer bounding‐rectangle of the contour
+    x, y, w, h = cv2.boundingRect(contour)
+
+    # 2) build your “destination” quad in the original image’s coordinate frame
+    #    in the same order as your `box` ([tl, tr, bl, br]):
+    pts_dst_full = np.array(
+        [
+            [x, y],  # top–left
+            [x + w, y],  # top–right
+            [x, y + h],  # bottom–left
+            [x + w, y + h],  # bottom–right
+        ],
+        dtype="float32",
+    )
+
+    # 3) compute the homography and warp the *whole* image (keep original size)
+    M_full = cv2.getPerspectiveTransform(box, pts_dst_full)
+    H, W = image.shape[:2]
+    full_warped = cv2.warpPerspective(image, M_full, (W, H))
+
+    return full_warped
+
+
 def extract_image_rects(
     image, contour, color_range=(LOWER_YELLOW_BGR, UPPER_YELLOW_BGR), return_contours=False, save_steps=False
 ):
     if save_steps:
-        plot_contour_on_image(contour, image, output_path="contour_of_rects.png")
+        misc.plot_contour_on_image(contour, image, output_path="contour_of_rects.png")
 
     # Find the minimum area rectangle that can enclose the contour
     box = _get_contour_corners(contour)
@@ -366,7 +365,7 @@ def get_score_section(file_or_bytes, return_rect_contours=False, save_steps=Fals
             if len(rects) > 0 and len(rects) % 18 == 0:
                 # Show contour on image
                 if save_steps:
-                    plot_contour_on_image(contour, image, output_path="contour_scores.png")
+                    misc.plot_contour_on_image(contour, image, output_path="contour_scores.png")
                 break
             else:
                 rects = None
@@ -375,10 +374,11 @@ def get_score_section(file_or_bytes, return_rect_contours=False, save_steps=Fals
             break
 
     if rects is not None and score_image is not None:
-        _, _, w, _ = cv2.boundingRect(contour)
-        contour = dilate_contour(contour, w // 8, image.shape[:2])
-        course_image, _ = extract_image_rects(image, contour)
-        course_image = course_image[50:500, 1000:]
+        x, y, w, h = cv2.boundingRect(contour)
+        warped = warped_from_contour(image, contour)
+        warped = warped[max(0, y - w // 8) : y + h, x : x + w]
+        warped = resize_image_to_width(warped, 5000)
+        course_image = warped[50:450, 1000:]
 
     return course_image, score_image, rects
 

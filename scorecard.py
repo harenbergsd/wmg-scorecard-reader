@@ -252,7 +252,10 @@ def get_course_from_image(image_path, min_confidence=0.5):
     results = ocr.ocr(np.array(course_image), cls=False)
     if len(results) == 0:
         raise ValueError("Course name not found in image")
-    results = [box for line in results for box in line]  # assume there is one line
+    results = [box for box in results[0]]  # assume there is one line
+
+    max_y = max(p[1] for p in results[0][0])
+    results = [box for box in results if min(p[1] for p in box[0]) <= max_y]
 
     # ocr_result: List of [box, (text, confidence)]
     # order by x coordinate
