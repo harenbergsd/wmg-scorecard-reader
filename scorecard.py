@@ -27,7 +27,17 @@ class Scorecard:
         self._include_best = False
         self._pars = None
 
-        self._df = pd.DataFrame(scores, columns=list(range(1, 19)), index=pd.Index(players))
+        # remove players with all NaN scores
+        indexes = []
+        for i in range(len(scores)):
+            if all(np.isnan(scores[i])):
+                indexes.append(i)
+        self._players = [p for i, p in enumerate(players) if i not in indexes]
+        self._scores = [s for i, s in enumerate(scores) if i not in indexes]
+        if len(players) == 0:
+            raise ValueError("No players with scores")
+
+        self._df = pd.DataFrame(self._scores, columns=list(range(1, 19)), index=pd.Index(self._players))
         self._df.index.name = self.course
         mask_all_na = self._df.notna().any(axis=1)
         self._df["total"] = self._df.sum(axis=1, skipna=True).mask(~mask_all_na)
