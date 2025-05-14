@@ -85,22 +85,10 @@ def split_scorecard(scorecard):
 
 async def process_images(images, ctx, msg):
     loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, _process_images_runner, images, ctx, loop, msg)
+    await loop.run_in_executor(None, process_images_runner, images, loop, msg)
 
 
-def _process_images_runner(images, ctx, loop, msg):
-    tmp_filename = None
-    try:
-        tmp_filename = f"{uuid.uuid4().hex}.png"
-        _process_images_sync(images, tmp_filename, ctx, loop, msg)
-    except Exception as e:
-        raise
-    finally:
-        if tmp_filename and os.path.exists(tmp_filename):
-            os.remove(tmp_filename)
-
-
-def _process_images_sync(images, tmp_filename, ctx, loop, msg):
+def process_images_runner(images, loop, msg):
     scorecards = defaultdict(list)
     msgtext = "Processing images..."
     st = time.time()
@@ -128,7 +116,10 @@ def _process_images_sync(images, tmp_filename, ctx, loop, msg):
 
     imgbufs = []
     csvbufs = []
+    courses = []
     for course, scorecard_list in scorecards.items():
+        courses.append(course)
+
         # combine cards
         scorecard = scorecard_list[0]
         for s in scorecard_list[1:]:
@@ -168,8 +159,9 @@ def _process_images_sync(images, tmp_filename, ctx, loop, msg):
             cbuf.seek(0)
             csvbufs.append(cbuf)
 
-    img_files = [discord.File(b, filename=f"report{i}.png") for i, b in enumerate(imgbufs)]
-    csv_files = [discord.File(b, filename=f"scorecard{i}.csv") for i, b in enumerate(csvbufs)]
+    filenames = [misc.sanitize_filename(course) for course in courses]
+    img_files = [discord.File(b, filename=f"{filenames[i]}.png") for i, b in enumerate(imgbufs)]
+    csv_files = [discord.File(b, filename=f"{filenames[i]}.csv") for i, b in enumerate(csvbufs)]
 
     asyncio.run_coroutine_threadsafe(msg.edit(content="", attachments=img_files + csv_files), loop)
 

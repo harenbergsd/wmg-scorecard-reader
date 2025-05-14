@@ -1,3 +1,4 @@
+import re
 import cv2
 import numpy as np
 import pickle
@@ -109,3 +110,12 @@ def string_edit_distance(s1, s2):
                 new_distances.append(min(distances[j], distances[j + 1], new_distances[-1]) + 1)
         distances = new_distances
     return distances[-1] / max(len(s1), len(s2))  # normalize by length
+
+
+def sanitize_filename(s):
+    s = s.strip().lower()
+    s = s.replace(" ", "_")
+    s = s.replace("-", "_")
+    s = re.sub(r'[\\/*?:"<>|,\'\"]', "", s)  # Remove invalid characters
+    s = re.sub(r"_+", "_", s)
+    return s
