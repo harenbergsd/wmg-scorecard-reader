@@ -315,9 +315,11 @@ def get_scores_from_image(image_path, standard_contours):
     scores = []
     _, _, rects = get_score_section(image_path, save_steps=False)
     for r in rects:
-        digit_contour = digit_from_score_rect(r)
-        score = match_digit_contour(digit_contour, standard_contours)
-        scores.append(score)
+        digit_contours = digits_from_score_rect(r)
+        scorestr = ""
+        for d in digit_contours:
+            scorestr += str(match_digit_contour(d, standard_contours))
+        scores.append(int(scorestr) if scorestr.isdigit() else np.nan)
     return scores
 
 

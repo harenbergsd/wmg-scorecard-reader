@@ -33,6 +33,7 @@ def main():
     pardiff = scorecard.compare_to_par()
     bestdiff = scorecard.compare_to_best()
     print(scorecard.course)
+    print(scorecard)
     dfs_to_image(
         [summary, shots, scorecard.df, pardiff.df, bestdiff.df],
         titles=["Summary", "Shots", "Scorecard", "Par Diff", "Best Diff"],

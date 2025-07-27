@@ -8,6 +8,7 @@ from scipy.spatial import procrustes
 
 from image_manipulation import *
 from constants import *
+from scorecard import *
 
 
 argparser = argparse.ArgumentParser(description="Extract scores from scorecard image for training")
@@ -79,10 +80,11 @@ def get_training_data():
 
         # Read the solution file
         solution_filepath = image_file.split(".")[0] + ".sol"
-        solution = Scorecard(solution_filepath)
+        solution = Scorecard.from_solution_file(solution_filepath)
 
         # Extract the score contour from the image
-        contours = {i: [] for i in set(solution.scores)}
+        scores = [s for player_scores in solution.scores for s in player_scores]
+        contours = {i: [] for i in set(scores)}
 
         if args.save_contours:
             shutil.rmtree(contour_dirname, ignore_errors=True)
@@ -92,18 +94,27 @@ def get_training_data():
         _, _, rects = get_score_section(image_file, save_steps=False)
         for i, rect in enumerate(rects):
             rect = np.asarray(rect).copy()
-            digit_contour = get_max_contour(rect)
+            digit_contours = get_contours(rect)
+            real_digits = [scores[i]]
+            if scores[i] is not np.nan:
+                real_digits = [int(d) for d in str(scores[i])] # double digit scores are possible, e.g. 10, 11, 12, etc.
+            for real_digit, contour in zip(real_digits, digit_contours):
+                if args.save_contours:
+                    score = scores[i]
+                    cv2.drawContours(rect, contour, -1, (0, 255, 0), 3)
+                    cv2.imwrite(os.path.join(contour_dirname, str(score), f"rect_{i}.png"), rect)
 
-            if args.save_contours:
-                score = solution.scores[i]
-                cv2.drawContours(rect, digit_contour, -1, (0, 255, 0), 3)
-                cv2.imwrite(os.path.join(contour_dirname, str(score), f"rect_{i}.png"), rect)
-
-            real_score = solution.scores[i]
-            contours[real_score].append(digit_contour.reshape(-1, 2))
+                contours[real_digit].append(contour.reshape(-1, 2))
 
         for score, digit_contours in sorted(contours.items()):
             score_contours[score] += digit_contours
+
+    # Handle special case for score 0
+    zero_img = Image.open("zero.jpg")
+    zero_contour = get_max_contour(np.array(zero_img))
+    if zero_contour is not None:
+        zero_contour = zero_contour.reshape(-1, 2)
+        score_contours[0].append(zero_contour)
 
     for score, contours in sorted(score_contours.items()):
         print(score, len(contours))
@@ -117,7 +128,7 @@ def get_training_data():
 def main():
     get_training_data()
 
-    # reach pickle file
+    # read pickle file
     with open("score_contours.pkl", "rb") as f:
         score_contours = pickle.load(f)
 

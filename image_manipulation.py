@@ -89,7 +89,7 @@ def solidity(contour):
     return area / hull_area
 
 
-def get_max_contour(image):
+def get_contours(image):
     # Convert the image to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -100,7 +100,7 @@ def get_max_contour(image):
     kernel = np.ones((5, 5), np.uint8)
     blurred = cv2.morphologyEx(blurred, cv2.MORPH_CLOSE, kernel)
 
-    # # remove 10% of border (which might have some noise and become a contour)
+    # remove 10% of border (which might have some noise and become a contour)
     h, w = blurred.shape
     border = int(0.1 * min(h, w))
     blurred = blurred[border : h - border, border : w - border]
@@ -112,16 +112,33 @@ def get_max_contour(image):
     # Threshold the image
     _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # Find contours for only black objects
-    contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    # save image
+    cv2.imwrite("thresh.png", thresh)
 
+    # Find contours for only black objects
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+
+    # Keep contours that are not border contours and have no parent contour
+    # Hierarchy is used to prevent a digit like 8 getting three contours (outer, inner, inner)
+    border_idx = -1
+    for i, contour in enumerate(contours):
+        if is_border_contour(contour):
+            border_idx = i
+            break
+    contours = [c for i,c in enumerate(contours) if not is_border_contour(c) and hierarchy[0][i][3] == border_idx]
+    
+    
     # remap contour to original size
-    contours = [c for c in contours if not is_border_contour(c)]
     for i, contour in enumerate(contours):
         contours[i] = contour + border
 
-    # Find the largest contour
-    if contours:
+    return contours
+
+
+def get_max_contour(image):
+    contours = get_contours(image)
+    contours.sort(key=cv2.contourArea, reverse=True)
+    if contours is not None:
         largest_contour = max(contours, key=cv2.contourArea)
         return largest_contour
     else:
@@ -473,7 +490,8 @@ def get_par_contours(image_path):
     return contours
 
 
-def digit_from_score_rect(rect):
+def digits_from_score_rect(rect):
     rect = np.asarray(rect).copy()
-    digit_contour = get_max_contour(rect).reshape(-1, 2)
-    return digit_contour
+    contours = get_contours(rect)
+    digit_contours = [c.reshape(-1, 2) for c in contours]
+    return digit_contours
