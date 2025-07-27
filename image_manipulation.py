@@ -112,9 +112,6 @@ def get_contours(image):
     # Threshold the image
     _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-    # save image
-    cv2.imwrite("thresh.png", thresh)
-
     # Find contours for only black objects
     contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
 

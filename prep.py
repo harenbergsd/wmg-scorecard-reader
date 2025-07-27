@@ -84,7 +84,9 @@ def get_training_data():
 
         # Extract the score contour from the image
         scores = [s for player_scores in solution.scores for s in player_scores]
-        contours = {i: [] for i in set(scores)}
+        digits = [int(d) for score in scores for d in str(score) if score is not np.nan]
+        digits += [np.nan] if np.nan in scores else []
+        contours = {i: [] for i in set(digits)}
 
         if args.save_contours:
             shutil.rmtree(contour_dirname, ignore_errors=True)
@@ -108,13 +110,6 @@ def get_training_data():
 
         for score, digit_contours in sorted(contours.items()):
             score_contours[score] += digit_contours
-
-    # Handle special case for score 0
-    zero_img = Image.open("zero.jpg")
-    zero_contour = get_max_contour(np.array(zero_img))
-    if zero_contour is not None:
-        zero_contour = zero_contour.reshape(-1, 2)
-        score_contours[0].append(zero_contour)
 
     for score, contours in sorted(score_contours.items()):
         print(score, len(contours))
