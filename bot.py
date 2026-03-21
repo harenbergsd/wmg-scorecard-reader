@@ -13,7 +13,7 @@ import uuid
 import time
 from collections import defaultdict
 
-import misc
+import utils
 
 file_lock = threading.Lock()
 
@@ -98,7 +98,7 @@ def process_images_runner(images, loop, msg):
     msgtext = "Processing images..."
     st = time.time()
     with file_lock:
-        standard_contours = misc.load_standard_contours()
+        standard_contours = utils.load_standard_contours()
         for i, (img, source_url) in enumerate(images):
             t0 = time.time()
             try:
@@ -153,7 +153,7 @@ def process_images_runner(images, loop, msg):
             best_comp = sc.compare_to_best().df
 
             ibuf = BytesIO()
-            misc.dfs_to_image(
+            utils.dfs_to_image(
                 [score_summary, shot_summary, sc.df, par_comp, best_comp],
                 titles=[
                     "Score Summary",
@@ -176,7 +176,7 @@ def process_images_runner(images, loop, msg):
             cbuf.seek(0)
             csvbufs.append(cbuf)
 
-    filenames = [misc.sanitize_filename(course) for course in courses]
+    filenames = [utils.sanitize_filename(course) for course in courses]
     img_files = [discord.File(b, filename=f"{filenames[i]}.png") for i, b in enumerate(imgbufs)]
     csv_files = [discord.File(b, filename=f"{filenames[i]}.csv") for i, b in enumerate(csvbufs)]
 

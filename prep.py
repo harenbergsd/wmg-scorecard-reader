@@ -37,7 +37,7 @@ def save_score_rectangles(rects):
 
 
 def get_digit_templates():
-    for f in os.listdir("scorecards"):
+    for f in os.listdir("data/scorecards"):
         os.remove(os.path.join("digits", f))
 
 
@@ -76,7 +76,7 @@ def get_training_data():
     score_contours = defaultdict(list)
     for image_file in image_files:
         print(image_file)
-        contour_dirname = os.path.join("contours", os.path.basename(image_file).split(".")[0])
+        contour_dirname = os.path.join("data/contours", os.path.basename(image_file).split(".")[0])
 
         # Read the solution file
         solution_filepath = image_file.split(".")[0] + ".sol"
@@ -99,7 +99,9 @@ def get_training_data():
             digit_contours = get_contours(rect)
             real_digits = [scores[i]]
             if scores[i] is not np.nan:
-                real_digits = [int(d) for d in str(scores[i])] # double digit scores are possible, e.g. 10, 11, 12, etc.
+                real_digits = [
+                    int(d) for d in str(scores[i])
+                ]  # double digit scores are possible, e.g. 10, 11, 12, etc.
             for real_digit, contour in zip(real_digits, digit_contours):
                 if args.save_contours:
                     score = scores[i]
@@ -142,7 +144,7 @@ def main():
             cv2.imwrite(f"{score}.png", img)
 
     # save the standard contours
-    with open("standard_contours.pkl", "wb") as f:
+    with open("data/standard_contours.pkl", "wb") as f:
         pickle.dump(standard_contours, f)
 
 

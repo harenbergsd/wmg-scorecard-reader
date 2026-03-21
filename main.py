@@ -1,9 +1,8 @@
 import numpy as np
 import argparse
 
-from misc import *
-from scorecard import *
-from image_manipulation import *
+from utils import load_standard_contours, dfs_to_image
+from scorecard import Scorecard
 
 argparser = argparse.ArgumentParser(description="Get the score from the scorecard image")
 # get possibly multiple paths to images
@@ -36,7 +35,6 @@ def main():
     shots = scorecard.summarize_shots()
     pardiff = scorecard.compare_to_par()
     bestdiff = scorecard.compare_to_best()
-    print(scorecard.course)
     print(scorecard)
     dfs_to_image(
         [summary, shots, scorecard.df, pardiff.df, bestdiff.df],

@@ -3,7 +3,7 @@ import cv2
 from PIL import Image
 from constants import *
 
-import misc
+import utils
 
 
 def reorder_contour(contour):
@@ -130,16 +130,6 @@ def get_contours(image):
     return contours
 
 
-def get_max_contour(image):
-    contours = get_contours(image)
-    contours.sort(key=cv2.contourArea, reverse=True)
-    if contours is not None:
-        largest_contour = max(contours, key=cv2.contourArea)
-        return largest_contour
-    else:
-        return None
-
-
 def get_contours_by_color(image, lower_color, upper_color, required_solidity=None):
     # Create a mask for the color
     mask = cv2.inRange(image, lower_color, upper_color)
@@ -207,42 +197,8 @@ def _get_contour_corners(contour):
     return corners
 
 
-def downsample_colors(image, num_colors=10, required_colors=None):
-    pixels = image.reshape((-1, 3)).astype(np.float32)
-    h, w = image.shape[:2]
-
-    sample_size = min(10000, len(pixels))
-    sample_idx = np.random.choice(len(pixels), sample_size, replace=False)
-    sample_pixels = pixels[sample_idx]
-
-    # K-means on sample
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 50, 1.0)
-    _, _, centers = cv2.kmeans(sample_pixels, num_colors, None, criteria, 10, cv2.KMEANS_PP_CENTERS)
-    palette = centers
-
-    # Add fixed color
-    if required_colors is not None:
-        fixed_color = np.array(required_colors, dtype=np.float32)
-        palette = np.vstack([fixed_color, centers])
-
-    # Apply to full image
-    dists = np.linalg.norm(pixels[:, None] - palette[None, :], axis=2)
-    nearest = np.argmin(dists, axis=1)
-    quantized_image = np.round(palette[nearest]).astype(np.uint8).reshape((h, w, 3))
-
-    return quantized_image
-
-
 def warped_from_contour(image, contour):
-    # Find the minimum area rectangle that can enclose the contour
     box = _get_contour_corners(contour)
-
-    # Sort points to ensure consistent order: top-left, top-right, bottom-left, bottom-right
-    # Sort by y-coordinate (top to bottom)
-    box = box[np.argsort(box[:, 1])]
-    top_points = box[:2][np.argsort(box[:2, 0])]
-    bottom_points = box[2:][np.argsort(box[2:, 0])]
-    box = np.vstack([top_points, bottom_points])
 
     # 1) get the integer bounding‐rectangle of the contour
     x, y, w, h = cv2.boundingRect(contour)
@@ -271,17 +227,9 @@ def extract_image_rects(
     image, contour, color_range=(LOWER_YELLOW_BGR, UPPER_YELLOW_BGR), return_contours=False, save_steps=False
 ):
     if save_steps:
-        misc.plot_contour_on_image(contour, image, output_path="contour_of_rects.png")
+        utils.plot_contour_on_image(contour, image, output_path="contour_of_rects.png")
 
-    # Find the minimum area rectangle that can enclose the contour
     box = _get_contour_corners(contour)
-
-    # Sort points to ensure consistent order: top-left, top-right, bottom-left, bottom-right
-    # Sort by y-coordinate (top to bottom)
-    box = box[np.argsort(box[:, 1])]
-    top_points = box[:2][np.argsort(box[:2, 0])]
-    bottom_points = box[2:][np.argsort(box[2:, 0])]
-    box = np.vstack([top_points, bottom_points])
 
     if save_steps:
         debug_image = image.copy()
@@ -378,7 +326,7 @@ def get_score_section(file_or_bytes, return_rect_contours=False, save_steps=Fals
             if len(rects) > 0 and len(rects) % 18 == 0:
                 # Show contour on image
                 if save_steps:
-                    misc.plot_contour_on_image(contour, image, output_path="contour_scores.png")
+                    utils.plot_contour_on_image(contour, image, output_path="contour_scores.png")
                 break
             else:
                 rects = None
@@ -468,31 +416,6 @@ def extract_yellow_rectangles(image, lower_color, upper_color, return_contours=F
             pil_image.save(f"rectangles/rect_{i}.png")
 
     return rectangle_images
-
-
-def get_par_contours(image_path):
-    course_image, score_image, rects = get_score_section(image_path, save_steps=False)
-
-    # Get area of image containing par values
-    x1, y1, _, _ = cv2.boundingRect(rects[0])
-    x2, y2, w2, _ = cv2.boundingRect(rects[17])
-    y = min(y1, y2) - 10
-    image = score_image[y - 100 : y, x1 : x2 + w2]
-
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(image, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-    # Find contours for only black objects
-    contours, _ = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
-
-    def height(contour):
-        x, y, w, h = cv2.boundingRect(contour)
-        return h
-
-    contours = [c for c in contours if height(c) > 50]
-    contours.sort(key=lambda x: min(x[:, 0, 0]))
-
-    return contours
 
 
 def digits_from_score_rect(rect):

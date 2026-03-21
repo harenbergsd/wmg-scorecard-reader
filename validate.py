@@ -1,11 +1,11 @@
 import os
 from pathlib import Path
 
-from misc import *
-from scorecard import *
-from constants import *
+from utils import load_standard_contours
+from scorecard import Scorecard
+from constants import IMG_TYPES
 
-directory = Path("scorecards")
+directory = Path("data/scorecards")
 image_files = [file for ext in IMG_TYPES for file in directory.glob(f"*.{ext}")]
 
 for image_file in image_files:

@@ -1,6 +1,8 @@
 __pycache__
 /rectangles/
-/contours/
+/data/contours/
+score_contours.pkl
 .env
 /myenv/
 .vscode/
+tables.png

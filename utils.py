@@ -2,7 +2,6 @@ import re
 import cv2
 import numpy as np
 import pickle
-from table2ascii import table2ascii as t2a, PresetStyle, Alignment
 
 
 def plot_contour(c, output_path="contour.png"):
@@ -21,6 +20,8 @@ def plot_contour_on_image(c, img, output_path="contour.png"):
 
 def plot_contour_comparison(c1, c2, output_path="contour_comp.png"):
     """Plot two contours for comparison."""
+    import matplotlib.pyplot as plt
+
     fig, ax = plt.subplots(1, 1, figsize=(10, 10))
 
     ax.plot(c1[:, 0], c1[:, 1], "bo-", label="Contour 1")
@@ -36,7 +37,7 @@ def plot_contour_comparison(c1, c2, output_path="contour_comp.png"):
     plt.savefig(output_path)
 
 
-def load_standard_contours(path="standard_contours.pkl"):
+def load_standard_contours(path="data/standard_contours.pkl"):
     with open(path, "rb") as f:
         standard_contours = pickle.load(f)
     return standard_contours
@@ -73,22 +74,6 @@ def dfs_to_image(dfs, titles=None, output_path="tables.png"):
     plt.tight_layout()
     plt.savefig(output_path, dpi=200)
     plt.close()
-
-
-def df_to_str(df, max_rows=None):
-    if max_rows is not None and max_rows > 0:
-        df = df.head(max_rows)
-    header = [df.index.name or ""] + list(df.columns)
-    body = [[idx] + list(row) for idx, row in zip(df.index, df.values)]
-
-    table_str = t2a(
-        header=header,
-        body=body,
-        style=PresetStyle.thin_compact,
-        alignments=[Alignment.LEFT] + [Alignment.RIGHT] * (len(header) - 1),
-    )
-
-    return table_str
 
 
 def string_edit_distance(s1, s2):

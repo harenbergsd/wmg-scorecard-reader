@@ -1,10 +1,12 @@
 import logging
 import numpy as np
+import cv2
 import pandas as pd
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageEnhance
 from scipy.spatial import procrustes
 
-from image_manipulation import *
+from image_manipulation import get_score_section, digits_from_score_rect, standardize_contour
+import utils
 import warnings
 
 warnings.filterwarnings("ignore", message="No ccache found.*", category=UserWarning)
@@ -90,11 +92,11 @@ class Scorecard:
         s._df = s._df.astype("Int64")
         return s
 
-    def _set_pars(self, pars_csv="pars.csv"):
+    def _set_pars(self, pars_csv="data/pars.csv"):
         pars = pd.read_csv(pars_csv, index_col="course")
 
         # calculate string similarity for each course
-        pars["similarity"] = pars.index.map(lambda x: misc.string_edit_distance(x, self.course))
+        pars["similarity"] = pars.index.map(lambda x: utils.string_edit_distance(x, self.course))
 
         best_match_idx = pars["similarity"].idxmin()
         pars = pars.drop(columns="similarity")
@@ -249,13 +251,6 @@ class Scorecard:
         scores = [scores[i : i + 18] for i in range(0, len(scores), 18)]
         return cls(course, players, scores)
 
-    def save_as_image(self, filename="scorecard.png"):
-        import plotly.figure_factory as ff
-
-        # Save the scorecard as an image
-        fig = ff.create_table(self._df)
-        fig.write_image(filename, scale=2)
-
 
 def get_course_from_image(image_path, min_confidence=0.5):
     course_image, _, _ = get_score_section(image_path, save_steps=False)
@@ -301,10 +296,10 @@ def get_course_from_image(image_path, min_confidence=0.5):
             raise ValueError("Race mode scorecards are not supported (times instead of scores).")
 
     # load courses from pars.csv
-    pars = pd.read_csv("pars.csv", index_col="course")
+    pars = pd.read_csv("data/pars.csv", index_col="course")
     courses = [c for c in pars.index.tolist()]
 
-    return min(courses, key=lambda c: misc.string_edit_distance(text, c))
+    return min(courses, key=lambda c: utils.string_edit_distance(text, c))
 
 
 def get_players_from_image(image_path):
