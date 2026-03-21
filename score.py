@@ -20,7 +20,11 @@ def main():
     standard_contours = load_standard_contours()
     scorecard = None
     for image_path in args.image_path:
-        s = Scorecard.from_image(image_path, standard_contours)
+        try:
+            s = Scorecard.from_image(image_path, standard_contours)
+        except ValueError as e:
+            print(f"Skipping {image_path}: {e}")
+            continue
         scorecard = s.copy() if scorecard is None else scorecard.combine(s)
     if scorecard is None:
         print("No scorecard found.")

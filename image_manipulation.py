@@ -122,9 +122,7 @@ def get_contours(image):
         if is_border_contour(contour):
             border_idx = i
             break
-    contours = [c for i,c in enumerate(contours) if not is_border_contour(c) and hierarchy[0][i][3] == border_idx]
-    
-    
+    contours = [c for i, c in enumerate(contours) if not is_border_contour(c) and hierarchy[0][i][3] == border_idx]
     # remap contour to original size
     for i, contour in enumerate(contours):
         contours[i] = contour + border
@@ -155,6 +153,7 @@ def get_contours_by_color(image, lower_color, upper_color, required_solidity=Non
 
     # Find contours
     contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_NONE)
+    contours = list(contours)
 
     if required_solidity is not None:
         contours = [c for c in contours if solidity(c) > required_solidity]
@@ -388,11 +387,20 @@ def get_score_section(file_or_bytes, return_rect_contours=False, save_steps=Fals
             break
 
     if rects is not None and score_image is not None:
+        # The course name is ABOVE the brown scorecard box in the original image.
+        # Warp the whole image to straighten it, then grab the region above the box.
         x, y, w, h = cv2.boundingRect(contour)
         warped = warped_from_contour(image, contour)
-        warped = warped[max(0, y - w // 8) : y + h, x : x + w]
-        warped = resize_image_to_width(warped, 5000)
-        course_image = warped[50:450, 1000:]
+
+        # Take a strip above the brown box (proportional margin) across its width
+        cw = int(0.15 * w)  # crop 20% from each side to avoid UI elements
+        course_image = warped[0:y, x + cw : x + w - cw]
+        yellow_contours = get_contours_by_color(course_image, *get_color_range(YELLOW_BGR, 0.3))
+        if yellow_contours:
+            x, y, w, h = cv2.boundingRect(yellow_contours[0])
+            course_image = course_image[y : y + h, x : x + w]
+        if course_image.size > 0:
+            course_image = resize_image_to_width(course_image, 5000)
 
     return course_image, score_image, rects
 

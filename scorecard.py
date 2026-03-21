@@ -270,20 +270,35 @@ def get_course_from_image(image_path, min_confidence=0.5):
         raise ValueError(
             "Failed to recognize the structure of the scorecard. Make sure the image is correct and clear."
         )
-    results = [box for box in results[0]]  # assume there is one line
+    full_results = [box for box in results[0]]
 
-    max_y = max(p[1] for p in results[0][0])
-    results = [box for box in results if min(p[1] for p in box[0]) <= max_y]
+    # Keep only the top row of text (course name line).
+    # The status line (MODE, RECORD, ROOM, etc.) is on a lower row.
+    # Find the bottom edge of the topmost box, then keep only boxes
+    # whose top edge is within that range.
+    top_box_bottom = min(max(p[1] for p in box[0]) for box in full_results)
+    results = [box for box in full_results if min(p[1] for p in box[0]) <= top_box_bottom]
 
     # ocr_result: List of [box, (text, confidence)]
     # order by x coordinate
     results = sorted(results, key=lambda x: x[0][0][0])
 
-    text = ""
+    # Gather all detected text, filtering out known UI words and status items
+    words = []
+    ignore_words = {"mode:", "record:", "room:"}
     for box in results:
         t, conf = box[1]
-        if conf > min_confidence:
-            text += t
+        t_lower = t.strip().lower()
+        if conf > min_confidence and t_lower not in ignore_words:
+            words.append(t)
+    text = " ".join(words)
+
+    # Detect unsupported race mode scorecards
+    results = [box for box in full_results if min(p[1] for p in box[0]) > top_box_bottom]
+    for box in results:
+        t, _ = box[1]
+        if "mode:" in t.strip().lower() and "race" in t.strip().lower():
+            raise ValueError("Race mode scorecards are not supported (times instead of scores).")
 
     # load courses from pars.csv
     pars = pd.read_csv("pars.csv", index_col="course")
