@@ -241,7 +241,11 @@ class Scorecard:
     def from_image(cls, image_file, standard_contours):
         course = get_course_from_image(image_file)
         players = get_players_from_image(image_file)
+        if not players:
+            raise ValueError(f"Could not read player names from scorecard (detected course: {course})")
         scores = get_scores_from_image(image_file, standard_contours)
+        if not scores:
+            raise ValueError(f"Could not read scores from scorecard (detected course: {course})")
         scores = [scores[i : i + 18] for i in range(0, len(scores), 18)]
         return cls(course, players, scores)
 
@@ -256,12 +260,16 @@ class Scorecard:
 def get_course_from_image(image_path, min_confidence=0.5):
     course_image, _, _ = get_score_section(image_path, save_steps=False)
     if course_image is None:
-        raise ValueError("Course name not found in image")
+        raise ValueError(
+            "Failed to recognize the structure of the scorecard. Make sure the image is correct and clear."
+        )
 
     ocr = PaddleOCR(lang="en")
     results = ocr.ocr(np.array(course_image), cls=False)
-    if len(results) == 0:
-        raise ValueError("Course name not found in image")
+    if not results or results[0] is None:
+        raise ValueError(
+            "Failed to recognize the structure of the scorecard. Make sure the image is correct and clear."
+        )
     results = [box for box in results[0]]  # assume there is one line
 
     max_y = max(p[1] for p in results[0][0])
@@ -286,6 +294,8 @@ def get_course_from_image(image_path, min_confidence=0.5):
 
 def get_players_from_image(image_path):
     _, score_image, rects = get_score_section(image_path, return_rect_contours=True, save_steps=False)
+    if rects is None:
+        raise ValueError("Could not find the score grid in the image")
     nrows = len(rects) // 18
 
     # define window boundaries of player name text
@@ -303,6 +313,8 @@ def get_players_from_image(image_path):
     # Use PaddleOCR
     ocr = PaddleOCR(lang="en")
     results = ocr.ocr(np.array(image), cls=False)
+    if not results or results[0] is None:
+        raise ValueError("Could not read player names from image")
     players = []
     for i, line in enumerate(results[0]):
         text, confidence = line[1]
@@ -314,6 +326,8 @@ def get_players_from_image(image_path):
 def get_scores_from_image(image_path, standard_contours):
     scores = []
     _, _, rects = get_score_section(image_path, save_steps=False)
+    if rects is None:
+        raise ValueError("Could not find the score grid in the image")
     for r in rects:
         digit_contours = digits_from_score_rect(r)
         scorestr = ""
