@@ -302,17 +302,20 @@ def get_course_from_image(image_path, min_confidence=0.5):
     return min(courses, key=lambda c: utils.string_edit_distance(text, c))
 
 
+def get_player_region(score_image, rect_contours):
+    """Crop the player name region from the left side of the warped score image."""
+    nrows = len(rect_contours) // 18
+    x2, y1, _, _ = cv2.boundingRect(rect_contours[0])
+    _, y2, _, h = cv2.boundingRect(rect_contours[(nrows - 1) * 18])
+    return score_image[y1 : (y2 + h), 0:x2]
+
+
 def get_players_from_image(image_path):
     _, score_image, rects = get_score_section(image_path, return_rect_contours=True, save_steps=False)
     if rects is None:
         raise ValueError("Could not find the score grid in the image")
-    nrows = len(rects) // 18
 
-    # define window boundaries of player name text
-    x1 = 0
-    x2, y1, _, _ = cv2.boundingRect(rects[0])
-    _, y2, _, h = cv2.boundingRect(rects[(nrows - 1) * 18])
-    image = score_image[y1 : (y2 + h), x1:x2]
+    image = get_player_region(score_image, rects)
 
     # improve image quality
     image = Image.fromarray(image)

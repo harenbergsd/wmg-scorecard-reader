@@ -104,3 +104,32 @@ def sanitize_filename(s):
     s = re.sub(r'[\\/*?:"<>|,\'\"]', "", s)  # Remove invalid characters
     s = re.sub(r"_+", "_", s)
     return s
+
+
+def render_templates_grid(standard_contours, cell_size=200, padding=10):
+    """Render all standard contour templates as a labeled grid image."""
+    import math
+
+    numeric_keys = sorted([k for k in standard_contours if not (isinstance(k, float) and math.isnan(k))])
+    nan_keys = [k for k in standard_contours if isinstance(k, float) and math.isnan(k)]
+    keys = numeric_keys + nan_keys
+
+    cols = min(len(keys), 5)
+    rows = (len(keys) + cols - 1) // cols
+    grid_w = cols * (cell_size + padding) + padding
+    grid_h = rows * (cell_size + padding) + padding
+    grid = np.zeros((grid_h, grid_w, 3), dtype=np.uint8)
+
+    for idx, key in enumerate(keys):
+        r, c_idx = divmod(idx, cols)
+        x0 = padding + c_idx * (cell_size + padding)
+        y0 = padding + r * (cell_size + padding)
+        sc = standard_contours[key]
+        sc_draw = (sc.reshape(-1, 1, 2) * (cell_size - 40) + 20).astype(np.int32)
+        cell = np.zeros((cell_size, cell_size, 3), dtype=np.uint8)
+        cv2.drawContours(cell, [sc_draw], -1, (0, 255, 0), 2)
+        label = "NaN" if isinstance(key, float) and math.isnan(key) else str(int(key))
+        cv2.putText(cell, label, (5, cell_size - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+        grid[y0 : y0 + cell_size, x0 : x0 + cell_size] = cell
+
+    return grid

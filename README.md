@@ -4,7 +4,7 @@ Extracts scores from screenshots of [Walkabout Minigolf](https://www.mightycocon
 
 Given one or more scorecard photos, it identifies the course, players, and per-hole scores, then produces summary tables.
 
-This tool is relatively efficient, although I have not optimized anything. I have the bot running on a tiny server with 1GB RAM (although I have a pagefile for swap space) and it does fine. On my tiny server it might take 20-30 seconds to fully analyze a scorecard and produce the output files. On a capable machine it might take a few seconds. Either way, much better than manual accounting :).
+This tool is relatively efficient, although I have not optimized anything. I have the bot running on a tiny server with 1GB RAM (although I have a pagefile for swap space) and it does fine. On my tiny server it might take 20-30 seconds to fully analyze a scorecard and produce the output files. On a capable machine it might take a second or two. Either way, much better than manual accounting :).
 
 Note: for this repo to function properly `pars.csv` must be up-to-date and include the course you are trying to analyze.
 
@@ -25,7 +25,9 @@ Note: for this repo to function properly `pars.csv` must be up-to-date and inclu
 4. **Course identification** – Crops the area above the scorecard, runs OCR (PaddleOCR), and fuzzy-matches against known course names from `data/pars.csv`.
 5. **Player identification** – Reads player names from the left column via OCR.
 
-I tried using OCR for everything, including the score extraction. However, surprisingly, OCR tools could not reliably classify the digits out of the box. It was often correct, but usually wrong at least once per scorecard, which effectively made it useless. That is why I decided to switch to a contour comparison method (procrustes), which seemed easy and straightforward.
+I tried using OCR for everything, including the score extraction. However, surprisingly, OCR tools could not reliably classify the digits out of the box. It was often correct, but usually wrong at least once per scorecard, which effectively made it useless.
+
+The digits are always the same font and have no variance (other than perspective and image quality), so I decided to switch to a contour comparison method (procrustes), which seemed easy and straightforward. 
 
 ## Files
 
@@ -63,6 +65,11 @@ pip install -r requirements.txt
 
 ```bash
 python main.py <image_path> [<image_path> ...]
+```
+
+For example,
+```bash
+python main.py data/scorecards/8bitlair-easy-0.jpg
 ```
 
 Pass multiple images from different halves of the same round and they will be combined into a single scorecard.
@@ -111,23 +118,31 @@ The strip above the scorecard is cropped and sent to OCR. String edit distance i
 
 ![Course name region](docs/course.png)
 
-### 4. Yellow rectangle masking
+### 4. Player name extraction
+
+The region to the left of the score grid is cropped and sent to OCR:
+
+![Player name region](docs/players.png)
+
+### 5. Yellow rectangle masking
 
 A color mask isolates the individual score cells:
 
 ![Yellow mask](docs/mask.png)
 
-### 5. Digit recognition
+### 6. Digit recognition
 
-Each score cell is extracted and its contour is matched against trained templates:
+Each score cell is extracted and the score contour is matched against all trained templates to find the best match using procrustes analysis:
 
 <p>
 <img src="docs/digit_rect.png" alt="Score rectangle" height="100">
 &nbsp;&nbsp;→&nbsp;&nbsp;
-<img src="docs/contour.png" alt="Standardized digit contour" height="100">
+<img src="docs/digit_outlined.png" alt="Contour detected on digit" height="100">
 </p>
 
-### 6. Final output
+![Standard contour templates](docs/templates.png)
+
+### 7. Final output
 
 The extracted data is assembled into summary tables:
 
