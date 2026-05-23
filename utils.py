@@ -97,6 +97,19 @@ def string_edit_distance(s1, s2):
     return distances[-1] / max(len(s1), len(s2))  # normalize by length
 
 
+def word_containment(query, candidate):
+    """Fraction of query words that appear in the candidate string."""
+
+    def tokenize(s):
+        return set(re.sub(r"[^a-z0-9]", " ", s.lower()).split())
+
+    q = tokenize(query)
+    c = tokenize(candidate)
+    if not q:
+        return 0.0
+    return len(q & c) / len(q)
+
+
 def sanitize_filename(s):
     s = s.strip().lower()
     s = s.replace(" ", "_")

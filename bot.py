@@ -1,7 +1,9 @@
 import os
+import csv
+import datetime
 import discord
 from dotenv import load_dotenv
-from discord.ext import commands
+from discord.ext import commands, tasks
 from scorecard import Scorecard
 from PIL import Image
 import aiohttp
@@ -12,8 +14,20 @@ import threading
 import uuid
 import time
 from collections import defaultdict
+import random
+import matplotlib
+import re
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import imageio.v2 as imageio
 
 import utils
+import fetch_pars
+
+PARS_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "pars.csv")
+COURSE_MATCH_MIN_SIMILARITY = 0.8
+
 
 file_lock = threading.Lock()
 
@@ -22,8 +36,14 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
 intents.message_content = True  # Enable message content intent
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 scorecard_cache = {}
+
+
+@bot.event
+async def on_ready():
+    refresh_pars.start()
+    print(f"Logged in as {bot.user}")
 
 
 class ScorecardError(Exception):
@@ -43,7 +63,7 @@ async def larrybot(ctx):
 async def help_command(ctx):
     embed = discord.Embed(
         title="LARRY Bot Help",
-        description="Reviews Walkabout Minigolf scorecards.",
+        description="Lifeless Algorithm Rapidly Reviewing Your scorecard",
         color=discord.Color.blue(),
     )
     embed.add_field(
@@ -51,11 +71,13 @@ async def help_command(ctx):
         value="""
         **help** - Show this help message        
         **review** - Reviews one or more scorecards
+        **course** - Look up a course code or expand it to the full name
+        **wheel** - Spin a wheel to randomly pick from a list of options
         """,
         inline=False,
     )
     embed.add_field(
-        name="Usage",
+        name="Review scorecards",
         value="Upload image(s) and, in the same message, type:\n"
         "```!larrybot review```\n"
         "Or provide Discord message link(s) with images:\n"
@@ -65,8 +87,57 @@ async def help_command(ctx):
         "`limit` - max number of messages to scan (from most recent, default: all).",
         inline=False,
     )
-    embed.set_footer(text="LARRY: Lifeless Algorithm Rapidly Reviewing Your scorecard")
+    embed.add_field(
+        name="Course name lookup",
+        value="Look up by code or name (fuzzy match supported):\n"
+        "```!larrybot course 20E 8BH```"
+        '```!larrybot course "Journey - hard"```',
+        inline=False,
+    )
+    embed.add_field(
+        name="Spin the wheel of fate",
+        value="Ask a question and provide options to pick from:\n"
+        '```!larrybot wheel "Who goes first?" Alice Bob Carol```',
+        inline=False,
+    )
     await ctx.send(embed=embed)
+
+
+@bot.command(name="help")
+async def top_level_help(ctx):
+    await help_command(ctx)
+
+
+@larrybot.command(name="course")
+async def course_command(ctx, *args):
+    if not args:
+        await ctx.send(
+            "Usage: `!larrybot course <code or name> [...]`\n"
+            'Examples: `!larrybot course 20E 8BH` or `!larrybot course "Journey - hard"`'
+        )
+        return
+
+    courses_data = _load_courses()
+    if not courses_data:
+        await ctx.send("Course data unavailable (pars.csv not found).")
+        return
+
+    lines = [_lookup_course(arg, courses_data) for arg in args]
+    await ctx.send("\n".join(lines))
+
+
+@larrybot.command(name="wheel")
+async def wheel_command(ctx, question, option1, *extra):
+    options = [option1] + list(extra)
+    selected = random.choice(options)
+
+    msg = await ctx.send("\U0001f3a1 Spinning the wheel\u2026")
+    event_loop = asyncio.get_running_loop()
+    gif = await event_loop.run_in_executor(None, _build_wheel_gif, options, selected, question)
+    await msg.delete()
+    await ctx.send(file=discord.File(gif, filename="wheel.gif"))
+    await asyncio.sleep(4)
+    await ctx.send(f"\U0001f3a1 The answer to **{question}** is: **{selected}**!")
 
 
 def split_scorecard(scorecard):
@@ -307,6 +378,141 @@ async def review_command(ctx, *args):
             "Please make sure the images are clear and contain the full scorecard with minimal obstructions."
         )
         await msg.edit(content=msgtext)
+
+
+def _load_courses():
+    rows = []
+    try:
+        with open(PARS_CSV, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                rows.append((row["code"].strip(), row["course"].strip()))
+    except FileNotFoundError:
+        pass
+    return rows
+
+
+def _lookup_course(arg, courses_data):
+    arg = arg.strip()
+
+    # Exact code match (case-insensitive)
+    for code, name in courses_data:
+        if code.upper() == arg.upper():
+            return f"`{code}` → {name}"
+
+    # Exact name match (case-insensitive)
+    for code, name in courses_data:
+        if name.lower() == arg.lower():
+            return f"{name} → `{code}`"
+
+    # Fuzzy name match — word containment: fraction of query words found in course name
+    arg = re.sub(r"\b(easy)\b", "", arg, flags=re.IGNORECASE).strip()  # disregard 'easy'
+    best_sim, best = 0.0, None
+    for code, name in courses_data:
+        sim = utils.word_containment(arg, name)
+        if sim > best_sim:
+            best_sim, best = sim, (code, name)
+
+    if best and best_sim >= COURSE_MATCH_MIN_SIMILARITY:
+        code, name = best
+        return f"{name} → `{code}`"
+
+    return f"❓ No match found for `{arg}`"
+
+
+def _build_wheel_gif(options, selected, question):
+    """Render an animated spin GIF in memory. Returns a BytesIO positioned at 0."""
+    n = len(options)
+    sweep = 360.0 / n
+    selected_idx = options.index(selected)
+
+    # With counterclock=False the centre of wedge i sits at: startangle - (i + 0.5)*sweep
+    # We want that to equal 90° (12-o'clock) so the pointer is unambiguous.
+    target = 90.0 + (selected_idx + 0.5) * sweep
+    # Begin several full rotations ahead so the spin is clearly visible.
+    spin_start = target + 5 * 360.0
+
+    colors = [plt.cm.tab20(i % 20) for i in range(n)]
+    labels = [o if len(o) <= 14 else o[:13] + "\u2026" for o in options]
+
+    num_frames = 60
+
+    # Ease-out quadratic: decelerates more gradually than cubic, giving a drawn-out coast to rest.
+    def ease_out(t):
+        return 1.0 - (1.0 - t) ** 2
+
+    # Build per-frame durations: shorter early (fast spin), longer near end (slow stop).
+    # With quadratic ease the velocity ~ (1-t), so duration ~ 1/(1-t).
+    # We clamp to avoid division by zero on the very last frame.
+    raw_durations = [1.0 / max(1.0 - i / (num_frames - 1), 0.03) for i in range(num_frames)]
+    total = sum(raw_durations)
+    # Scale so the whole animation lasts ~4 s.
+    durations = [d / total * 4.0 for d in raw_durations]
+
+    frames = []
+    for i in range(num_frames):
+        t = ease_out(i / (num_frames - 1))
+        angle = spin_start + t * (target - spin_start)
+        is_last = i == num_frames - 1
+
+        fig, ax = plt.subplots(figsize=(5, 5), dpi=80)
+        wedges, texts = ax.pie(
+            [1] * n,
+            labels=labels,
+            startangle=angle,
+            counterclock=False,
+            colors=colors,
+        )
+        if is_last:
+            wedges[selected_idx].set_edgecolor("gold")
+            wedges[selected_idx].set_linewidth(5)
+            texts[selected_idx].set_fontweight("bold")
+
+        # Pointer: a downward triangle just above the 12-o'clock position.
+        # Pie radius is 1.0 in data coords; place pointer at y=1.15.
+        ax.text(0, 1.15, "\u25bc", ha="center", va="bottom", fontsize=16, color="red", fontweight="bold")
+
+        ax.axis("equal")
+        ax.set_title(question, fontsize=11, pad=22)
+
+        buf = BytesIO()
+        fig.savefig(buf, format="png")
+        plt.close(fig)
+        buf.seek(0)
+        frames.append(imageio.imread(buf))
+
+    gif = BytesIO()
+    imageio.mimsave(gif, frames, format="gif", duration=durations)
+    gif.seek(0)
+    return gif
+
+
+@tasks.loop(hours=24)
+async def refresh_pars():
+    loop = asyncio.get_running_loop()
+    try:
+        raw_rows = await loop.run_in_executor(None, fetch_pars.fetch_all_rows)
+    except Exception as e:
+        print(
+            f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] [refresh_pars] fetch failed: {e}; keeping existing pars.csv"
+        )
+        return
+    if not raw_rows:
+        print(
+            f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] [refresh_pars] fetch returned no rows; keeping existing pars.csv"
+        )
+        return
+    try:
+        csv_rows = fetch_pars.build_csv_rows(raw_rows)
+        # Write to a temp file first, then atomically replace the live CSV so
+        # concurrent readers never see a truncated or partial file.
+        tmp = PARS_CSV + ".tmp"
+        fetch_pars.write_csv(csv_rows, tmp)
+        os.replace(tmp, PARS_CSV)
+        print(
+            f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] [refresh_pars] updated pars.csv with {len(csv_rows)} courses"
+        )
+    except Exception as e:
+        print(f"[{datetime.datetime.now():%Y-%m-%d %H:%M:%S}] [refresh_pars] failed to write pars.csv: {e}")
 
 
 bot.run(TOKEN)
