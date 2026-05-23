@@ -99,7 +99,7 @@ class Scorecard:
         pars["similarity"] = pars.index.map(lambda x: utils.string_edit_distance(x, self.course))
 
         best_match_idx = pars["similarity"].idxmin()
-        pars = pars.drop(columns="similarity")
+        pars = pars.drop(columns=["similarity", "code"])
         self._pars = pars.loc[best_match_idx].values
 
     def summarize_scores(self):

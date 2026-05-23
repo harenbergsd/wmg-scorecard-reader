@@ -1,4 +1,4 @@
-20,000 Leagues Under the Sea
+20,000 Leagues Under The Sea
 GOMARINO13,2,2,2,2,2,2,2,2,1,3,3,2,2,3,4,1,2,2
 TEDDYBEARASAURUS,3,2,1,3,3,2,3,4,1,3,3,1,3,2,3,1,3,2
 NAKLEH,2,1,2,2,2,2,4,2,2,4,2,2,2,1,3,2,2,3
