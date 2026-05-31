@@ -82,11 +82,19 @@ Requires a `DISCORD_TOKEN` environment variable (or `.env` file):
 python bot.py
 ```
 
-In Discord, attach scorecard screenshot(s) and run:
+The bot responds to `!larrybot <command>`. Commands:
 
-```
-!larrybot review
-```
+| Command | Description |
+|---|---|
+| `!larrybot review` | Analyze scorecard image(s) attached to the message |
+| `!larrybot review <message-link> ...` | Analyze images from one or more Discord message links |
+| `!larrybot review #channel [limit]` | Scan a channel's history for scorecards (optional message limit) |
+| `!larrybot courses [filters]` | List courses, optionally filtered by difficulty (`easy`/`hard`), name, code, exclusions (`-name`), or `top:N`/`bottom:N` WMGT difficulty rankings |
+| `!larrybot coursewheel "<question>" [filters]` | Spin a wheel of courses matching the given filters |
+| `!larrybot wheel "<question>" option1 option2 ...` | Spin a wheel to randomly pick from a custom list of options |
+| `!larrybot help` | Show full usage details |
+
+Quoted arguments (e.g. multi-word options or exclusions like `-"meow wolf"`) work with both straight and smart/curly quotes.
 
 ## Testing
 

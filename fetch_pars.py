@@ -228,6 +228,97 @@ def write_csv(rows, path):
 
 
 # ---------------------------------------------------------------------------
+# Difficulty (STDDEV) fetch
+# ---------------------------------------------------------------------------
+
+DIFFICULTY_URL = "https://mywmgt.com/ords/r/fhit/wmgt/course-analysis"
+DEFAULT_DIFFICULTY_OUTPUT = "data/difficulty.csv"
+
+
+def fetch_difficulty():
+    """Fetch STDDEV difficulty data for all courses from the course-analysis chart.
+
+    Returns a list of (code, stddev) tuples sorted ascending by stddev (easiest first).
+    The ajax identifier for the chart contains a per-session HMAC signature, so it
+    must be re-extracted from each fresh page load.
+    """
+    session = requests.Session()
+    session.headers.update(HEADERS)
+
+    # Loading with p200_formula=STDDEV sets the formula in APEX session state so
+    # the chart lazy-load AJAX call returns STDDEV values instead of all-nulls.
+    resp = session.get(DIFFICULTY_URL, params={"p200_formula": "STDDEV"}, timeout=30)
+    resp.raise_for_status()
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    fd = {t["name"]: t.get("value", "") for t in soup.find_all("input", type="hidden") if t.get("name")}
+
+    # Extract the per-session ajax identifier for the allCoursesChart region.
+    # It is the last long quoted string in the jetChart.init("allCoursesChart", ...) call.
+    scripts = re.findall(r"<script[^>]*>(.*?)</script>", resp.text, re.DOTALL)
+    ajax_id = None
+    for s in scripts:
+        idx = s.find('"allCoursesChart"')
+        if idx >= 0:
+            chunk = s[idx : idx + 2000]
+            strings = re.findall(r'"([A-Za-z0-9+/=_\-\\u002F]{60,})"', chunk)
+            if strings:
+                ajax_id = strings[-1].replace(r"\u002F", "/")
+            break
+
+    if not ajax_id:
+        raise RuntimeError("Could not locate allCoursesChart ajax identifier in page source")
+
+    chart_resp = session.post(
+        AJAX_URL,
+        data={
+            "p_flow_id": fd["p_flow_id"],
+            "p_flow_step_id": fd["p_flow_step_id"],
+            "p_instance": fd["p_instance"],
+            "p_request": "PLUGIN=" + ajax_id,
+            "pageItems": "P200_COURSE_ID,P200_FORMULA",
+            "P200_COURSE_ID": "",
+            "P200_FORMULA": "STDDEV",
+        },
+        headers={
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/javascript, */*",
+            "Referer": DIFFICULTY_URL,
+        },
+        timeout=30,
+    )
+    chart_resp.raise_for_status()
+
+    data = chart_resp.json()
+    series = data.get("series", [{}])
+    items = series[0].get("items", []) if series else []
+
+    result = []
+    for item in items:
+        code = item.get("name")
+        value = item.get("value")
+        if code and value is not None:
+            result.append((code, float(value)))
+
+    if not result:
+        raise RuntimeError("Difficulty fetch returned no non-null values")
+
+    result.sort(key=lambda x: x[1])
+    print(f"Fetched difficulty for {len(result)} courses", file=sys.stderr)
+    return result
+
+
+def write_difficulty_csv(rows, path):
+    """Write [(code, stddev), ...] sorted easiest-first to a CSV with rank column."""
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["code", "stddev", "rank"])
+        for rank, (code, stddev) in enumerate(rows, 1):
+            writer.writerow([code, stddev, rank])
+    print(f"Wrote {len(rows)} difficulty scores to {path}", file=sys.stderr)
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -240,6 +331,17 @@ def main():
         default=DEFAULT_OUTPUT,
         help=f"Output CSV path (default: {DEFAULT_OUTPUT})",
     )
+    parser.add_argument(
+        "--difficulty-output",
+        "-d",
+        default=DEFAULT_DIFFICULTY_OUTPUT,
+        help=f"Difficulty CSV output path (default: {DEFAULT_DIFFICULTY_OUTPUT})",
+    )
+    parser.add_argument(
+        "--no-difficulty",
+        action="store_true",
+        help="Skip fetching difficulty data",
+    )
     args = parser.parse_args()
 
     raw = fetch_all_rows()
@@ -251,6 +353,13 @@ def main():
 
     csv_rows = build_csv_rows(raw)
     write_csv(csv_rows, args.output)
+
+    if not args.no_difficulty:
+        try:
+            difficulty_rows = fetch_difficulty()
+            write_difficulty_csv(difficulty_rows, args.difficulty_output)
+        except Exception as e:
+            print(f"Warning: difficulty fetch failed: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":
