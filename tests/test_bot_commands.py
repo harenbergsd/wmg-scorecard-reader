@@ -8,6 +8,8 @@ Run with:
 import sys
 import os
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
 # Allow importing bot without starting the Discord client.
 # bot.py is guarded by `if __name__ == "__main__": bot.run(TOKEN)` so the
 # import is safe as long as DISCORD_TOKEN doesn't need to be present.

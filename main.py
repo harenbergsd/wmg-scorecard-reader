@@ -1,5 +1,9 @@
+import sys
+import os
 import numpy as np
 import argparse
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 
 from utils import load_standard_contours, dfs_to_image
 from scorecard import Scorecard

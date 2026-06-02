@@ -1,4 +1,6 @@
 import os
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "src"))
 import csv
 import datetime
 import discord
@@ -158,18 +160,21 @@ async def courses_command(ctx):
         return
 
     difficulty_map = _load_difficulty()
+    rank_map = _load_rank()
     results = _filter_courses(courses_data, args, difficulty_map)
 
     if not results:
         await ctx.send("No courses matched your filters.")
         return
     
-    col_header = f" {'#':>2}  {'CODE':<4}  {'DIFF':>4}  COURSE\n {'─'*2}  {'─'*4}  {'─'*4}  {'─'*41}"
+    col_header = f" {'#':>2}  {'CODE':<4}  {'DIFF':>4}  {'RANK':>4}  COURSE\n {'─'*2}  {'─'*4}  {'─'*4}  {'─'*4}  {'─'*41}"
     rows = []
     for i, (code, name) in enumerate(results, 1):
         diff = difficulty_map.get(code)
         diff_str = f"{diff:.1f}" if diff is not None else " —"
-        rows.append(f" {i:>2}  {code:<4}  {diff_str:>4}  {name}")
+        rank = rank_map.get(code)
+        rank_str = f"{rank}" if rank is not None else "—"
+        rows.append(f" {i:>2}  {code:<4}  {diff_str:>4}  {rank_str:>4}  {name}")
 
     # Split across multiple messages only when necessary (Discord 2000-char limit).
     first_header = col_header
@@ -510,6 +515,21 @@ def _load_difficulty():
             for row in csv.DictReader(f):
                 try:
                     result[row["code"].strip()] = float(row["stddev"])
+                except (ValueError, KeyError):
+                    pass
+    except FileNotFoundError:
+        pass
+    return result
+
+
+def _load_rank():
+    """Return {code: rank} from difficulty.csv. Empty dict if file missing."""
+    result = {}
+    try:
+        with open(DIFFICULTY_CSV, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                try:
+                    result[row["code"].strip()] = int(row["rank"])
                 except (ValueError, KeyError):
                     pass
     except FileNotFoundError:

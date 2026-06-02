@@ -35,12 +35,14 @@ The digits are always the same font and have no variance (other than perspective
 |---|---|
 | `main.py` | CLI entry point – process one or more scorecard images |
 | `bot.py` | Discord bot – responds to `!larrybot review` with scorecard summaries |
-| `scorecard.py` | `Scorecard` class and OCR-based extraction functions |
-| `image_manipulation.py` | Image processing: warping, contour detection, color filtering |
-| `utils.py` | Utilities: standard contour loading, image export, string distance |
-| `constants.py` | Color constants and detection thresholds |
-| `prep.py` | Tools for generating `data/standard_contours.pkl` training data |
-| `validate.py` | Regression tests against ground-truth `.sol` files |
+| `src/scorecard.py` | `Scorecard` class and OCR-based extraction functions |
+| `src/image_manipulation.py` | Image processing: warping, contour detection, color filtering |
+| `src/utils.py` | Utilities: standard contour loading, image export, string distance |
+| `src/constants.py` | Color constants and detection thresholds |
+| `src/fetch_pars.py` | Scrapes course/par data from the WMGT website |
+| `src/prep.py` | Tools for generating `data/standard_contours.pkl` training data |
+| `tests/validate.py` | Regression tests against ground-truth `.sol` files |
+| `tests/test_bot_commands.py` | Unit tests for bot course filtering logic |
 
 ### Data directory (`data/`)
 
@@ -99,7 +101,7 @@ Quoted arguments (e.g. multi-word options or exclusions like `-"meow wolf"`) wor
 ## Testing
 
 ```bash
-python validate.py
+python tests/validate.py
 ```
 
 Compares scorecard extraction against `.sol` files in `data/scorecards/`.
